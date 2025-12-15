@@ -5,6 +5,7 @@ import { mockDoc } from "./mockDoc";
 import { CanvasView } from "./CanvasView";
 import { Inspector } from "./Inspector";
 import type { DocumentJson, PageJson } from "../editor-core/schema";
+import { PagesPanel } from "./PagesPanel";
 
 function uid(prefix: string) {
     return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
@@ -90,8 +91,10 @@ export function EditorApp() {
     const [leftW, setLeftW] = useState(240);
     const [rightW, setRightW] = useState(320);
     const [mounted, setMounted] = useState(false);
-    const isProgrammaticScrollRef = useRef(false);
-    const scrollRootRef = centerRef;
+
+    type LeftMode = "thumb" | "list";
+    const [leftMode, setLeftMode] = useState<LeftMode>("thumb");
+
     useEffect(() => {
         setMounted(true);
 
@@ -278,36 +281,15 @@ export function EditorApp() {
                     flexDirection: "column",
                 }}
             >
-                <div style={{ padding: 12, borderBottom: "1px solid #e5e7eb" }}>
-                    <div style={{ fontWeight: 700 }}>Pages</div>
-                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                        <button onClick={addPageToEnd}>+ Add</button>
-                        <button onClick={deleteActivePage} disabled={pages.length <= 1}>Delete</button>
-                    </div>
-                </div>
-
-                {/* left body (scroll) */}
-                <div style={{ flex: 1, overflow: "auto", padding: 8 }}>
-                    {pages.map((p) => {
-                        const active = p.id === activePageId;
-                        return (
-                            <div
-                                key={p.id}
-                                onClick={() => setActivePageId(p.id)}
-                                style={{
-                                    padding: "8px 10px",
-                                    border: "1px solid #e5e7eb",
-                                    marginBottom: 8,
-                                    cursor: "pointer",
-                                    background: active ? "#f3f4f6" : "#fff",
-                                }}
-                            >
-                                <div style={{ fontWeight: 600 }}>{p.name ?? `Page ${p.index + 1}`}</div>
-                                <div style={{ fontSize: 12, color: "#6b7280" }}>index: {p.index}</div>
-                            </div>
-                        );
-                    })}
-                </div>
+                <PagesPanel
+                    doc={doc}
+                    pages={pages}
+                    activePageId={activePageId}
+                    setActivePageId={(id) => setActivePageId(id)}
+                    addPageToEnd={addPageToEnd}
+                    deleteActivePage={deleteActivePage}
+                    leftW={leftW}
+                />
             </div>
 
             {/* Left resizer */}

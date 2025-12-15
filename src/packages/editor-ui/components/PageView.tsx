@@ -11,6 +11,9 @@ export function PageView({
     active,
     onActivate,
     registerRef,
+    loading,
+    renderNodes = true,    // ✅ เพิ่ม
+    thumbPreview = false
 }: {
     document: DocumentJson;
     page: PageJson;
@@ -18,18 +21,30 @@ export function PageView({
     active: boolean;
     onActivate?: () => void;
     registerRef?: (el: HTMLDivElement | null) => void;
+    loading?: boolean;
+    renderNodes?: boolean;       // ✅ เพิ่ม
+    thumbPreview?: boolean
 }) {
-    const preset: PagePreset | null = document.pagePresets.find((pp) => pp.id === page.presetId) ?? null;
+    const preset = document.pagePresets.find(pp => pp.id === page.presetId) ?? null;
     if (!preset) return <div>no preset</div>;
 
     const nodes = useMemo(() => {
-        return document.nodes
-            .filter((n) => n.pageId === page.id && n.visible !== false)
+        if (!renderNodes) return [];
+        let list = document.nodes
+            .filter(n => n.pageId === page.id && n.visible !== false)
             .slice()
             .sort((a, b) => a.z - b.z);
-    }, [document.nodes, page.id]);
+
+        if (thumbPreview) {
+            list = list
+                .filter(n => n.type === "text")   // เอาแค่ text
+                .slice(0, 8);                      // จำกัดจำนวน
+        }
+        return list;
+    }, [document.nodes, page.id, renderNodes, thumbPreview]);
 
     const margin = page.override?.margin ? { ...preset.margin, ...page.override.margin } : preset.margin;
+
 
     return (
         <div
@@ -46,6 +61,31 @@ export function PageView({
             }}
             onMouseDown={() => onActivate?.()}
         >
+            {loading && (
+                <div
+                    style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: "rgba(255,255,255,0.55)",
+                        zIndex: 10,
+                    }}
+                >
+                    <div
+                        style={{
+                            width: 26,
+                            height: 26,
+                            borderRadius: 999,
+                            border: "3px solid rgba(0,0,0,0.15)",
+                            borderTopColor: "rgba(0,0,0,0.55)",
+                            animation: "spin 0.9s linear infinite",
+                        }}
+                    />
+                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                </div>
+            )}
             {showMargin && (
                 <div
                     style={{
@@ -61,7 +101,7 @@ export function PageView({
                 />
             )}
 
-            {nodes.map((n) => (
+            {renderNodes && nodes.map(n => (   // ✅ กันไว้ชัด ๆ
                 <NodeView key={n.id} node={n} document={document} />
             ))}
         </div>

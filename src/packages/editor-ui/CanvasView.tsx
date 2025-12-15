@@ -9,6 +9,7 @@ import { PageView } from "./components/PageView";
 
 import { useScrollToPage } from "./hooks/useScrollToPage";
 import { useActivePageFromScroll } from "./hooks/useActivePageFromScroll";
+import { usePageNodesMock } from "./hooks/usePageNodesMock";
 
 type CanvasMode = "single" | "scroll";
 
@@ -82,6 +83,13 @@ export function CanvasView({
         scrollToPage(activePageId);
     }, [mode, activePageId, rootEl, scrollToPage]);
 
+    const nodesMock = usePageNodesMock(document);
+
+    useEffect(() => {
+        if (mode !== "scroll") return;
+        if (!activePageId) return;
+        nodesMock.ensureAround(activePageId, 2); // prefetch ±2
+    }, [mode, activePageId, nodesMock]);
     /* ---------- render ---------- */
     if (mode === "scroll") {
         const pages = document.pages.slice().sort((a, b) => a.index - b.index);
@@ -102,6 +110,7 @@ export function CanvasView({
                                     setActivePageId?.(p.id);
                                 }}
                                 registerRef={(el) => registerPageRef(p.id, el)}
+                                loading={nodesMock.isLoading(p.id) && p.id === activePageId}
                             />
 
                             {idx < pages.length - 1 && (

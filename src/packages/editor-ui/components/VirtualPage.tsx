@@ -12,6 +12,8 @@ export function VirtualPage({
     active,
     onActivate,
     registerRef,
+    loading,
+    onVisibleChange,
 }: {
     rootEl: HTMLElement | null;
     document: DocumentJson;
@@ -20,28 +22,45 @@ export function VirtualPage({
     active: boolean;
     onActivate?: () => void;
     registerRef?: (el: HTMLDivElement | null) => void;
+    loading?: boolean;
+    onVisibleChange?: (pageId: string, visible: boolean) => void;
 }) {
     const [visible, setVisible] = React.useState(false);
     const holderRef = React.useRef<HTMLDivElement | null>(null);
 
-    const preset = document.pagePresets.find((pp) => pp.id === page.presetId) ?? null;
-
-    React.useEffect(() => {
-        const el = holderRef.current;
-        if (!el) return;
-
-        const obs = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), {
-            root: rootEl,
-            rootMargin: "1200px 0px",
-            threshold: 0.01,
-        });
-
-        obs.observe(el);
-        return () => obs.disconnect();
-    }, [rootEl]);
+    const preset =
+        document.pagePresets.find((pp) => pp.id === page.presetId) ?? null;
 
     const pageH = preset?.size.height ?? 1100;
     const pageW = preset?.size.width ?? 820;
+
+    const setVis = React.useCallback(
+        (next: boolean) => {
+            setVisible((v) => (v === next ? v : next));
+            onVisibleChange?.(page.id, next);
+        },
+        [onVisibleChange, page.id]
+    );
+
+    React.useEffect(() => {
+        if (!rootEl) return;
+        const el = holderRef.current;
+        if (!el) return;
+
+        const obs = new IntersectionObserver(
+            ([entry]) => {
+                setVis(entry.isIntersecting);
+            },
+            {
+                root: rootEl,
+                rootMargin: "800px 0px",
+                threshold: 0.01,
+            }
+        );
+
+        obs.observe(el);
+        return () => obs.disconnect();
+    }, [rootEl, page.id, setVis]);
 
     return (
         <div
@@ -58,6 +77,9 @@ export function VirtualPage({
                     showMargin={showMargin}
                     active={active}
                     onActivate={onActivate}
+                    loading={loading}
+                    renderNodes={true}
+                    thumbPreview={true}
                 />
             ) : (
                 <div
