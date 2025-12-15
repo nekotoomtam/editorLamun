@@ -91,6 +91,7 @@ export function EditorApp() {
     const [rightW, setRightW] = useState(320);
     const [mounted, setMounted] = useState(false);
     const isProgrammaticScrollRef = useRef(false);
+    const scrollRootRef = centerRef;
     useEffect(() => {
         setMounted(true);
 
@@ -247,19 +248,13 @@ export function EditorApp() {
             <div style={{ position: "absolute", inset: 0, background: "#e5e7eb" }}>
                 <div ref={centerRef} style={{ height: "100%", overflow: "auto", padding: 16 }}>
                     <CanvasView
-                        document={{ ...doc, pages }}
+                        document={doc}
                         activePageId={activePageId}
-                        showMargin
-                        mode="scroll"
-                        onAddPageAfter={insertPageAfter}
-                        zoom={zoom}
                         setActivePageId={setActivePageId}
+                        mode="scroll"
+                        zoom={zoom}
                         scrollRootRef={centerRef}
-                        isProgrammaticScrollRef={isProgrammaticScrollRef}
-                        onActivePageChangeFromScroll={(pid) => {
-                            setActivePageId((cur) => (cur === pid ? cur : pid));
-                        }}
-
+                        onAddPageAfter={insertPageAfter}
                     />
                 </div>
 
