@@ -73,12 +73,45 @@ function ZoomBar({
     );
 }
 
+
+const MIN_LEFT = 200;
+const MAX_LEFT = 420;
+const MIN_RIGHT = 260;
+const MAX_RIGHT = 420;
+const COLLAPSE_LEFT = 56;
+const COLLAPSE_RIGHT = 56;
+const LEFT_KEY = "editor:leftWidth";
+const RIGHT_KEY = "editor:rightWidth";
 export function EditorApp() {
     const [doc, setDoc] = useState<DocumentJson>(mockDoc);
     const centerRef = useRef<HTMLDivElement | null>(null);
     const [activePageId, setActivePageId] = useState<string | null>(
         mockDoc.pages[0]?.id ?? null
     );
+    const rootRef = useRef<HTMLDivElement | null>(null);
+    const [leftW, setLeftW] = useState(240);
+    const [rightW, setRightW] = useState(320);
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+
+        const lw = Number(localStorage.getItem(LEFT_KEY));
+        const rw = Number(localStorage.getItem(RIGHT_KEY));
+        if (!Number.isNaN(lw) && lw) setLeftW(lw);
+        if (!Number.isNaN(rw) && rw) setRightW(rw);
+    }, []);
+
+    useEffect(() => {
+        if (!mounted) return;
+        localStorage.setItem(LEFT_KEY, String(leftW));
+    }, [leftW, mounted]);
+
+    useEffect(() => {
+        if (!mounted) return;
+        localStorage.setItem(RIGHT_KEY, String(rightW));
+    }, [rightW, mounted]);
+
     const [zoom, setZoom] = useState(1);
 
     const pages = useMemo(() => sortPages(doc.pages), [doc.pages]);
@@ -102,7 +135,53 @@ export function EditorApp() {
         el.addEventListener("wheel", onWheel, { passive: false });
         return () => el.removeEventListener("wheel", onWheel);
     }, [setZoom]);
+    useEffect(() => {
+        localStorage.setItem(LEFT_KEY, String(leftW));
+    }, [leftW]);
 
+    useEffect(() => {
+        localStorage.setItem(RIGHT_KEY, String(rightW));
+    }, [rightW]);
+
+    const draggingLeft = useRef(false);
+    const draggingRight = useRef(false);
+
+    useEffect(() => {
+        let raf = 0;
+
+        const onMove = (e: MouseEvent) => {
+            if (draggingLeft.current) {
+                cancelAnimationFrame(raf);
+                raf = requestAnimationFrame(() => {
+                    setLeftW((w) =>
+                        Math.max(MIN_LEFT, Math.min(MAX_LEFT, e.clientX))
+                    );
+                });
+            }
+
+            if (draggingRight.current) {
+                cancelAnimationFrame(raf);
+                raf = requestAnimationFrame(() => {
+                    const rootW = rootRef.current?.getBoundingClientRect().width ?? window.innerWidth;
+                    const next = rootW - e.clientX; // ความกว้างจากขอบขวาของ root
+                    setRightW(Math.max(MIN_RIGHT, Math.min(MAX_RIGHT, next)));
+                });
+            }
+        };
+
+        const onUp = () => {
+            draggingLeft.current = false;
+            draggingRight.current = false;
+            document.body.style.userSelect = "";
+        };
+
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+        return () => {
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup", onUp);
+        };
+    }, []);
     // ====== Page actions ======
 
     function addPageToEnd() {
@@ -169,26 +248,82 @@ export function EditorApp() {
     // ====== UI ======
 
     return (
-        <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-            {/* Left: Pages */}
+        <div style={{ height: "100vh", overflow: "hidden", position: "relative" }}>
+            {/* Center: Canvas (เต็มจอ ไม่โดน push) */}
             <div
                 style={{
-                    width: 240,
-                    borderRight: "1px solid #e5e7eb",
-                    background: "#fff",
-                    display: "flex",
-                    flexDirection: "column",
-                    minWidth: 240,
+                    position: "absolute",
+                    inset: 0,
+                    background: "#e5e7eb",
+                    overflow: "hidden",
                 }}
             >
-                {/* left header (ไม่ scroll) */}
+                <div
+                    ref={centerRef}
+                    style={{
+                        height: "100%",
+                        overflow: "auto",
+                        paddingTop: 16,
+                        paddingBottom: 16,
+                        // กัน sidebar ทับ (ถ้าอยากให้ทับก็ลบทิ้ง)
+                        paddingLeft: leftW + 6 + 16,
+                        paddingRight: rightW + 6 + 16,
+                    }}
+                >
+                    <CanvasView
+                        document={{ ...doc, pages }}
+                        activePageId={activePageId}
+                        showMargin
+                        mode="scroll"
+                        onAddPageAfter={insertPageAfter}
+                        zoom={zoom}
+                        setActivePageId={setActivePageId}
+                    />
+                </div>
+
+                {/* Floating zoom (ไม่โดน scroll) */}
+                <div style={{ position: "absolute", top: 12, right: rightW + 6 + 12, zIndex: 50 }}>
+                    <ZoomBar zoom={zoom} setZoom={setZoom} />
+                </div>
+            </div>
+            <div style={{ position: "absolute", inset: 0, background: "#e5e7eb" }}>
+                <div ref={centerRef} style={{ height: "100%", overflow: "auto", padding: 16 }}>
+                    <CanvasView
+                        document={{ ...doc, pages }}
+                        activePageId={activePageId}
+                        showMargin
+                        mode="scroll"
+                        onAddPageAfter={insertPageAfter}
+                        zoom={zoom}
+                        setActivePageId={setActivePageId}
+                    />
+                </div>
+
+                <div style={{ position: "absolute", top: 12, right: 12, zIndex: 50 }}>
+                    <ZoomBar zoom={zoom} setZoom={setZoom} />
+                </div>
+            </div>
+
+            {/* Left overlay */}
+            <div
+                style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: leftW,
+                    zIndex: 60,
+                    background: "#fff",
+                    borderRight: "1px solid #e5e7eb",
+                    display: "flex",
+                    flexDirection: "column",
+                }}
+            >
                 <div style={{ padding: 12, borderBottom: "1px solid #e5e7eb" }}>
                     <div style={{ fontWeight: 700 }}>Pages</div>
                     <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                         <button onClick={addPageToEnd}>+ Add</button>
-                        <button onClick={deleteActivePage} disabled={pages.length <= 1}>
-                            Delete
-                        </button>
+                        <button onClick={deleteActivePage} disabled={pages.length <= 1}>Delete</button>
                     </div>
                 </div>
 
@@ -216,51 +351,63 @@ export function EditorApp() {
                 </div>
             </div>
 
-            {/* Center: Canvas */}
-            <div style={{ flex: 1, background: "#e5e7eb", position: "relative", overflow: "hidden" }}>
-                {/* center scroll container (wheel hook อยู่ตัวนี้) */}
-                <div
-                    ref={centerRef}
-                    style={{
-                        height: "100%",
-                        overflow: "auto",
-                        padding: 16,
-                    }}
-                >
-                    <CanvasView
-                        document={{ ...doc, pages }}
-                        activePageId={activePageId}
-                        showMargin
-                        mode="scroll"
-                        onAddPageAfter={insertPageAfter}
-                        zoom={zoom}
-                        setActivePageId={setActivePageId}
-                    />
-                </div>
+            {/* Left resizer */}
+            <div
+                onMouseDown={(e) => {
+                    e.preventDefault();
+                    draggingLeft.current = true;
+                    document.body.style.userSelect = "none";
+                }}
+                style={{
+                    position: "absolute",
+                    left: leftW - 3,
+                    top: 0,
+                    bottom: 0,
+                    width: 6,
+                    cursor: "col-resize",
+                    zIndex: 70,
+                }}
+            />
 
-                {/* Floating: top-right (ไม่โดน scroll) */}
-                <div style={{ position: "absolute", top: 12, right: 12, zIndex: 20 }}>
-                    <ZoomBar zoom={zoom} setZoom={setZoom} />
-                </div>
-            </div>
-
-            {/* Right: Inspector */}
+            {/* Right overlay */}
             <div
                 style={{
-                    width: 320,
-                    borderLeft: "1px solid #e5e7eb",
+                    position: "absolute",
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: rightW,
+                    zIndex: 60,
                     background: "#fff",
+                    borderLeft: "1px solid #e5e7eb",
                     display: "flex",
                     flexDirection: "column",
-                    minWidth: 320,
                 }}
             >
-                {/* right body (scroll) */}
                 <div style={{ flex: 1, overflow: "auto" }}>
                     <Inspector />
                 </div>
             </div>
-        </div>
 
+            {/* Right resizer */}
+            <div
+                onMouseDown={(e) => {
+                    e.preventDefault();
+                    draggingRight.current = true; // ✅ จุดนี้สำคัญ
+                    document.body.style.userSelect = "none";
+                }}
+                style={{
+                    position: "absolute",
+                    right: rightW - 3,
+                    top: 0,
+                    bottom: 0,
+                    width: 6,
+                    cursor: "col-resize",
+                    zIndex: 70,
+                }}
+            />
+        </div>
     );
+
+
 }
