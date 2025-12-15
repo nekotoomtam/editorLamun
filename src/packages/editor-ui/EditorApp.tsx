@@ -78,8 +78,6 @@ const MIN_LEFT = 200;
 const MAX_LEFT = 420;
 const MIN_RIGHT = 260;
 const MAX_RIGHT = 420;
-const COLLAPSE_LEFT = 56;
-const COLLAPSE_RIGHT = 56;
 const LEFT_KEY = "editor:leftWidth";
 const RIGHT_KEY = "editor:rightWidth";
 export function EditorApp() {
@@ -92,7 +90,7 @@ export function EditorApp() {
     const [leftW, setLeftW] = useState(240);
     const [rightW, setRightW] = useState(320);
     const [mounted, setMounted] = useState(false);
-
+    const isProgrammaticScrollRef = useRef(false);
     useEffect(() => {
         setMounted(true);
 
@@ -135,13 +133,7 @@ export function EditorApp() {
         el.addEventListener("wheel", onWheel, { passive: false });
         return () => el.removeEventListener("wheel", onWheel);
     }, [setZoom]);
-    useEffect(() => {
-        localStorage.setItem(LEFT_KEY, String(leftW));
-    }, [leftW]);
 
-    useEffect(() => {
-        localStorage.setItem(RIGHT_KEY, String(rightW));
-    }, [rightW]);
 
     const draggingLeft = useRef(false);
     const draggingRight = useRef(false);
@@ -248,45 +240,10 @@ export function EditorApp() {
     // ====== UI ======
 
     return (
-        <div style={{ height: "100vh", overflow: "hidden", position: "relative" }}>
+        <div ref={rootRef} style={{ height: "100vh", overflow: "hidden", position: "relative" }}>
             {/* Center: Canvas (เต็มจอ ไม่โดน push) */}
-            <div
-                style={{
-                    position: "absolute",
-                    inset: 0,
-                    background: "#e5e7eb",
-                    overflow: "hidden",
-                }}
-            >
-                <div
-                    ref={centerRef}
-                    style={{
-                        height: "100%",
-                        overflow: "auto",
-                        paddingTop: 16,
-                        paddingBottom: 16,
-                        // กัน sidebar ทับ (ถ้าอยากให้ทับก็ลบทิ้ง)
-                        paddingLeft: leftW + 6 + 16,
-                        paddingRight: rightW + 6 + 16,
-                    }}
-                >
-                    <CanvasView
-                        document={{ ...doc, pages }}
-                        activePageId={activePageId}
-                        showMargin
-                        mode="scroll"
-                        onAddPageAfter={insertPageAfter}
-                        zoom={zoom}
-                        setActivePageId={setActivePageId}
-                        scrollRootRef={centerRef}
-                    />
-                </div>
 
-                {/* Floating zoom (ไม่โดน scroll) */}
-                <div style={{ position: "absolute", top: 12, right: rightW + 6 + 12, zIndex: 50 }}>
-                    <ZoomBar zoom={zoom} setZoom={setZoom} />
-                </div>
-            </div>
+
             <div style={{ position: "absolute", inset: 0, background: "#e5e7eb" }}>
                 <div ref={centerRef} style={{ height: "100%", overflow: "auto", padding: 16 }}>
                     <CanvasView
@@ -297,10 +254,16 @@ export function EditorApp() {
                         onAddPageAfter={insertPageAfter}
                         zoom={zoom}
                         setActivePageId={setActivePageId}
+                        scrollRootRef={centerRef}
+                        isProgrammaticScrollRef={isProgrammaticScrollRef}
+                        onActivePageChangeFromScroll={(pid) => {
+                            setActivePageId((cur) => (cur === pid ? cur : pid));
+                        }}
+
                     />
                 </div>
 
-                <div style={{ position: "absolute", top: 12, right: 12, zIndex: 50 }}>
+                <div style={{ position: "absolute", top: 12, right: rightW + 6 + 12, zIndex: 50 }}>
                     <ZoomBar zoom={zoom} setZoom={setZoom} />
                 </div>
             </div>
@@ -335,7 +298,11 @@ export function EditorApp() {
                         return (
                             <div
                                 key={p.id}
-                                onClick={() => setActivePageId(p.id)}
+                                onClick={() => {
+                                    isProgrammaticScrollRef.current = true;
+                                    setActivePageId(p.id);
+                                    setTimeout(() => (isProgrammaticScrollRef.current = false), 450);
+                                }}
                                 style={{
                                     padding: "8px 10px",
                                     border: "1px solid #e5e7eb",

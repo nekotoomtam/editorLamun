@@ -20,7 +20,9 @@ export function CanvasView({
     onAddPageAfter,
     zoom = 1,
     setActivePageId,
-    scrollRootRef, // 👈 เพิ่ม
+    scrollRootRef,
+    onActivePageChangeFromScroll,
+    isProgrammaticScrollRef,
 }: {
     document: DocumentJson;
     activePageId: string | null;
@@ -29,22 +31,95 @@ export function CanvasView({
     onAddPageAfter?: (pageId: string) => void;
     zoom?: number;
     setActivePageId?: (pageId: string) => void;
-    scrollRootRef?: React.RefObject<HTMLElement | null>; // 👈 เพิ่ม
+    scrollRootRef?: React.RefObject<HTMLElement | null>;
+    onActivePageChangeFromScroll?: (pageId: string) => void;
+    isProgrammaticScrollRef?: React.RefObject<boolean>;
 }) {
     const pageRefs = useRef<Record<string, HTMLDivElement | null>>({});
+    const seen = useRef<Record<string, IntersectionObserverEntry>>({});
+    const rafPick = useRef<number | null>(null)
+    const activeObsRef = useRef<IntersectionObserver | null>(null);
+    const pendingScrollToRef = useRef<string | null>(null);
 
     useEffect(() => {
         if (mode !== "scroll") return;
         if (!activePageId) return;
 
+        const root = scrollRootRef?.current;
+        if (!root) return;
+
         const el = pageRefs.current[activePageId];
-        if (!el) return;
+        if (!el) {
+            pendingScrollToRef.current = activePageId; // ✅ จุดที่มึงขาด
+            return;
+        }
 
-        requestAnimationFrame(() => {
-            el.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (isProgrammaticScrollRef) isProgrammaticScrollRef.current = true;
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+
+        const t = window.setTimeout(() => {
+            if (isProgrammaticScrollRef) isProgrammaticScrollRef.current = false;
+        }, 450);
+
+        return () => window.clearTimeout(t);
+    }, [activePageId, mode, scrollRootRef, isProgrammaticScrollRef]);
+
+
+    useEffect(() => {
+        if (mode !== "scroll") return;
+        const root = scrollRootRef?.current;
+        if (!root) return;
+        if (!onActivePageChangeFromScroll) return;
+
+        const pickBest = () => {
+            rafPick.current = null;
+            if (isProgrammaticScrollRef?.current) return;
+
+            const entries = Object.values(seen.current).filter((e) => e.isIntersecting);
+            if (entries.length === 0) return;
+
+            let best = entries[0];
+            for (const e of entries) {
+                const t = e.boundingClientRect.top;
+                const bt = best.boundingClientRect.top;
+                const score = (x: number) => (x >= 0 ? x : 999999 + Math.abs(x));
+                if (score(t) < score(bt)) best = e;
+            }
+
+            const pageId = (best.target as HTMLElement).dataset.pageId; // data-page-id => pageId
+            if (pageId) onActivePageChangeFromScroll(pageId);
+        };
+
+        const obs = new IntersectionObserver(
+            (entries) => {
+                for (const e of entries) {
+                    const pageId = (e.target as HTMLElement).dataset.pageId;
+                    if (pageId) seen.current[pageId] = e;
+                }
+                if (rafPick.current) cancelAnimationFrame(rafPick.current);
+                rafPick.current = requestAnimationFrame(pickBest);
+            },
+            {
+                root,
+                threshold: [0.01, 0.1, 0.25, 0.5, 0.75],
+                rootMargin: "-20% 0px -70% 0px",
+            }
+        );
+
+        activeObsRef.current = obs;
+
+        // สำคัญ: ตอน obs เพิ่งสร้าง ให้ไป observe ของที่มี ref แล้ว
+        Object.values(pageRefs.current).forEach((el) => {
+            if (el) obs.observe(el);
         });
-    }, [activePageId, mode]);
 
+        return () => {
+            if (rafPick.current) cancelAnimationFrame(rafPick.current);
+            obs.disconnect();
+            activeObsRef.current = null;
+            seen.current = {};
+        };
+    }, [mode, scrollRootRef, onActivePageChangeFromScroll, isProgrammaticScrollRef]);
 
     if (mode === "scroll") {
         const pages = document.pages.slice().sort((a, b) => a.index - b.index);
@@ -61,7 +136,30 @@ export function CanvasView({
                                 active={p.id === activePageId}
                                 onActivate={() => setActivePageId?.(p.id)}
                                 rootRef={scrollRootRef}
-                                registerRef={(el) => (pageRefs.current[p.id] = el)} // 👈 ทำให้ jump เจอ
+                                registerRef={(el) => {
+                                    const prev = pageRefs.current[p.id];
+                                    if (prev && activeObsRef.current) activeObsRef.current.unobserve(prev);
+
+                                    pageRefs.current[p.id] = el;
+
+                                    if (el && activeObsRef.current) activeObsRef.current.observe(el);
+
+                                    if (el && pendingScrollToRef.current === p.id) {
+                                        pendingScrollToRef.current = null;
+                                        if (isProgrammaticScrollRef) isProgrammaticScrollRef.current = true;
+                                        el.scrollIntoView({ behavior: "smooth", block: "start" });
+                                        window.setTimeout(() => {
+                                            if (isProgrammaticScrollRef) isProgrammaticScrollRef.current = false;
+                                        }, 450);
+                                    }
+
+                                    // ✅ ถ้า el เป็น null (โดนถอด) เคลียร์ entry ที่ค้าง
+                                    if (!el) {
+                                        delete seen.current[p.id];
+                                    }
+                                }}
+
+
                             />
 
                             {idx < pages.length - 1 && (
@@ -355,6 +453,7 @@ function VirtualPage({
 
     React.useEffect(() => {
         const el = holderRef.current;
+
         if (!el) return;
 
         const obs = new IntersectionObserver(
@@ -374,7 +473,13 @@ function VirtualPage({
     const pageW = preset?.size.width ?? 820;
 
     return (
-        <div ref={holderRef}>
+        <div
+            ref={(el) => {
+                holderRef.current = el;
+                registerRef?.(el);
+            }}
+            data-page-id={page.id}
+        >
             {visible ? (
                 <PageView
                     document={document}
@@ -382,11 +487,9 @@ function VirtualPage({
                     showMargin={showMargin}
                     active={active}
                     onActivate={onActivate}
-                    registerRef={registerRef}   // ✅ ให้ jump เจอ element จริง
                 />
             ) : (
                 <div
-                    ref={registerRef}           // ✅ ให้ jump เจอแม้ยังไม่ render
                     style={{
                         width: pageW,
                         height: pageH,
@@ -398,5 +501,6 @@ function VirtualPage({
             )}
         </div>
     );
+
 }
 
