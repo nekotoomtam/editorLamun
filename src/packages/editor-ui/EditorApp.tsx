@@ -278,6 +278,7 @@ export function EditorApp() {
                         onAddPageAfter={insertPageAfter}
                         zoom={zoom}
                         setActivePageId={setActivePageId}
+                        scrollRootRef={centerRef}
                     />
                 </div>
 

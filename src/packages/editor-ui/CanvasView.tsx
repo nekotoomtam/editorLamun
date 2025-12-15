@@ -1,13 +1,7 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import type {
-    AssetImage,
-    DocumentJson,
-    NodeJson,
-    PageJson,
-    PagePreset,
-} from "../editor-core/schema";
+import React, { useEffect, useMemo, useRef } from "react";
+import type { DocumentJson, PageJson, PagePreset, NodeJson, AssetImage } from "../editor-core/schema";
 
 type CanvasMode = "single" | "scroll";
 type ImageFit = "contain" | "cover" | "stretch";
@@ -25,7 +19,8 @@ export function CanvasView({
     mode = "single",
     onAddPageAfter,
     zoom = 1,
-    setActivePageId
+    setActivePageId,
+    scrollRootRef, // 👈 เพิ่ม
 }: {
     document: DocumentJson;
     activePageId: string | null;
@@ -34,9 +29,21 @@ export function CanvasView({
     onAddPageAfter?: (pageId: string) => void;
     zoom?: number;
     setActivePageId?: (pageId: string) => void;
+    scrollRootRef?: React.RefObject<HTMLElement | null>; // 👈 เพิ่ม
 }) {
+    const pageRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
+    useEffect(() => {
+        if (mode !== "scroll") return;
+        if (!activePageId) return;
 
+        const el = pageRefs.current[activePageId];
+        if (!el) return;
+
+        requestAnimationFrame(() => {
+            el.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+    }, [activePageId, mode]);
 
 
     if (mode === "scroll") {
@@ -44,20 +51,17 @@ export function CanvasView({
 
         return (
             <div style={{ padding: 24 }}>
-                <div
-                    style={{
-                        transform: `scale(${zoom})`,
-                        transformOrigin: "top center",
-                    }}
-                >
+                <div style={{ zoom }}>
                     {pages.map((p, idx) => (
                         <React.Fragment key={p.id}>
-                            <PageView
+                            <VirtualPage
                                 document={document}
                                 page={p}
                                 showMargin={showMargin}
                                 active={p.id === activePageId}
                                 onActivate={() => setActivePageId?.(p.id)}
+                                rootRef={scrollRootRef}
+                                registerRef={(el) => (pageRefs.current[p.id] = el)} // 👈 ทำให้ jump เจอ
                             />
 
                             {idx < pages.length - 1 && (
@@ -65,6 +69,7 @@ export function CanvasView({
                             )}
                         </React.Fragment>
                     ))}
+
 
                     {pages.length > 0 && (
                         <GapAdd onAdd={() => onAddPageAfter?.(pages[pages.length - 1].id)} />
@@ -74,14 +79,13 @@ export function CanvasView({
         );
     }
 
-
     // single page mode
     const page = document.pages.find((p) => p.id === activePageId) ?? null;
     if (!page) return <div>no page</div>;
 
     return (
         <div style={{ padding: 24 }}>
-            <div style={{ transform: `scale(${zoom})`, transformOrigin: "top center" }}>
+            <div style={{ zoom }}>
                 <PageView
                     document={document}
                     page={page}
@@ -93,6 +97,7 @@ export function CanvasView({
         </div>
     );
 }
+
 
 function GapAdd({ onAdd, width = 820 }: { onAdd: () => void; width?: number }) {
     const [hover, setHover] = React.useState(false);
@@ -181,12 +186,14 @@ function PageView({
     showMargin,
     active,
     onActivate,
+    registerRef,
 }: {
     document: DocumentJson;
     page: PageJson;
     showMargin: boolean;
     active: boolean;
     onActivate?: () => void;
+    registerRef?: (el: HTMLDivElement | null) => void;
 }) {
     const preset: PagePreset | null =
         document.pagePresets.find((pp) => pp.id === page.presetId) ?? null;
@@ -210,14 +217,15 @@ function PageView({
         height: preset.size.height,
         background: "#ffffff",
         margin: "0 auto",
-
         boxShadow: active
             ? "0 10px 26px rgba(0,0,0,0.10), 0 0 30px rgba(59,130,246,0.28)"
             : "0 10px 26px rgba(0,0,0,0.10)",
+
     };
 
     return (
         <div
+            ref={registerRef}
             style={pageStyle}
             onMouseDown={() => onActivate?.()}
         >
@@ -242,7 +250,6 @@ function PageView({
         </div>
     );
 }
-
 function NodeView({ node, document }: { node: NodeJson; document: DocumentJson }) {
     const base: React.CSSProperties = {
         position: "absolute",
@@ -319,4 +326,77 @@ function NodeView({ node, document }: { node: NodeJson; document: DocumentJson }
             group
         </div>
     );
+
+
 }
+
+function VirtualPage({
+    document,
+    page,
+    showMargin,
+    active,
+    onActivate,
+    rootRef,
+    registerRef,
+}: {
+    document: DocumentJson;
+    page: PageJson;
+    showMargin: boolean;
+    active: boolean;
+    onActivate?: () => void;
+    rootRef?: React.RefObject<HTMLElement | null>;
+    registerRef?: (el: HTMLDivElement | null) => void;
+}) {
+    const [visible, setVisible] = React.useState(false);
+    const holderRef = React.useRef<HTMLDivElement | null>(null);
+
+    const preset =
+        document.pagePresets.find((pp) => pp.id === page.presetId) ?? null;
+
+    React.useEffect(() => {
+        const el = holderRef.current;
+        if (!el) return;
+
+        const obs = new IntersectionObserver(
+            ([entry]) => setVisible(entry.isIntersecting),
+            {
+                root: rootRef?.current ?? null,
+                rootMargin: "1200px 0px",
+                threshold: 0.01,
+            }
+        );
+
+        obs.observe(el);
+        return () => obs.disconnect();
+    }, [rootRef]);
+
+    const pageH = preset?.size.height ?? 1100;
+    const pageW = preset?.size.width ?? 820;
+
+    return (
+        <div ref={holderRef}>
+            {visible ? (
+                <PageView
+                    document={document}
+                    page={page}
+                    showMargin={showMargin}
+                    active={active}
+                    onActivate={onActivate}
+                    registerRef={registerRef}   // ✅ ให้ jump เจอ element จริง
+                />
+            ) : (
+                <div
+                    ref={registerRef}           // ✅ ให้ jump เจอแม้ยังไม่ render
+                    style={{
+                        width: pageW,
+                        height: pageH,
+                        margin: "0 auto",
+                        background: "rgba(255,255,255,0.35)",
+                        borderRadius: 6,
+                    }}
+                />
+            )}
+        </div>
+    );
+}
+
