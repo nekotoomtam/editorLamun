@@ -40,30 +40,73 @@ export function CanvasView({
     const rafPick = useRef<number | null>(null)
     const activeObsRef = useRef<IntersectionObserver | null>(null);
     const pendingScrollToRef = useRef<string | null>(null);
+    const unlockRafRef = useRef<number | null>(null);
+    const activeFromScrollRef = useRef(false);
+    const lastManualSelectAtRef = useRef(0);
+
+    const markManualSelect = () => {
+        lastManualSelectAtRef.current = performance.now();
+    };
+
+
+    const scrollAndLockTo = (target: HTMLElement) => {
+        const root = scrollRootRef?.current;
+        if (!root) return;
+
+        if (isProgrammaticScrollRef) isProgrammaticScrollRef.current = true;
+
+        // หา offsetTop ของ target ภายใน root
+        const rootEl = root as HTMLElement;
+        const targetTop = target.offsetTop; // เพราะ target อยู่ใน flow เดียวกันใน root
+
+        rootEl.scrollTo({ top: targetTop, behavior: "smooth" });
+
+        const tolerance = 6;
+
+        const tick = () => {
+            const rootNow = scrollRootRef?.current as HTMLElement | null;
+            if (!rootNow || !target.isConnected) {
+                if (isProgrammaticScrollRef) isProgrammaticScrollRef.current = false;
+                return;
+            }
+
+            const arrived = Math.abs(rootNow.scrollTop - targetTop) <= tolerance;
+
+            if (arrived) {
+                if (isProgrammaticScrollRef) isProgrammaticScrollRef.current = false;
+                return;
+            }
+
+            unlockRafRef.current = requestAnimationFrame(tick);
+        };
+
+        if (unlockRafRef.current) cancelAnimationFrame(unlockRafRef.current);
+        unlockRafRef.current = requestAnimationFrame(tick);
+    };
 
     useEffect(() => {
         if (mode !== "scroll") return;
         if (!activePageId) return;
 
-        const root = scrollRootRef?.current;
-        if (!root) return;
-
-        const el = pageRefs.current[activePageId];
-        if (!el) {
-            pendingScrollToRef.current = activePageId; // ✅ จุดที่มึงขาด
+        // ✅ ถ้าเปลี่ยน active เพราะ user scroll -> ไม่ต้องดูด
+        if (activeFromScrollRef.current) {
+            activeFromScrollRef.current = false;
             return;
         }
 
-        if (isProgrammaticScrollRef) isProgrammaticScrollRef.current = true;
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        const el = pageRefs.current[activePageId];
+        if (!el) {
+            pendingScrollToRef.current = activePageId;
+            return;
+        }
 
-        const t = window.setTimeout(() => {
-            if (isProgrammaticScrollRef) isProgrammaticScrollRef.current = false;
-        }, 450);
+        scrollAndLockTo(el);
 
-        return () => window.clearTimeout(t);
-    }, [activePageId, mode, scrollRootRef, isProgrammaticScrollRef]);
-
+        return () => {
+            if (unlockRafRef.current) cancelAnimationFrame(unlockRafRef.current);
+            unlockRafRef.current = null;
+        };
+    }, [activePageId, mode]);
 
     useEffect(() => {
         if (mode !== "scroll") return;
@@ -73,22 +116,43 @@ export function CanvasView({
 
         const pickBest = () => {
             rafPick.current = null;
+
+            // ✅ ถ้าเพิ่งคลิกเมื่อกี้ ไม่ต้องให้ scroll มายุ่ง
+            if (performance.now() - lastManualSelectAtRef.current < 300) return;
+
             if (isProgrammaticScrollRef?.current) return;
 
             const entries = Object.values(seen.current).filter((e) => e.isIntersecting);
             if (entries.length === 0) return;
 
+            const rootEl = scrollRootRef?.current as HTMLElement | null;
+            if (!rootEl) return;
+
+            const rootRect = rootEl.getBoundingClientRect();
+            const anchorY = rootRect.top + rootRect.height * 0.33;
+
+            // หา best จริงๆ
             let best = entries[0];
+            let bestDist = Infinity;
+
             for (const e of entries) {
-                const t = e.boundingClientRect.top;
-                const bt = best.boundingClientRect.top;
-                const score = (x: number) => (x >= 0 ? x : 999999 + Math.abs(x));
-                if (score(t) < score(bt)) best = e;
+                const dist = Math.abs(e.boundingClientRect.top - anchorY);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = e;
+                }
             }
 
-            const pageId = (best.target as HTMLElement).dataset.pageId; // data-page-id => pageId
-            if (pageId) onActivePageChangeFromScroll(pageId);
+            const pageId = (best.target as HTMLElement).dataset.pageId;
+            if (!pageId) return;
+
+            // ✅ ถ้าเป็นหน้าเดิม ไม่ต้องยิงซ้ำ (นี่แหละตัวทำให้ “คลิกแล้วเพี้ยน”)
+            if (pageId === activePageId) return;
+
+            activeFromScrollRef.current = true;
+            onActivePageChangeFromScroll?.(pageId);
         };
+
 
         const obs = new IntersectionObserver(
             (entries) => {
@@ -119,7 +183,7 @@ export function CanvasView({
             activeObsRef.current = null;
             seen.current = {};
         };
-    }, [mode, scrollRootRef, onActivePageChangeFromScroll, isProgrammaticScrollRef]);
+    }, [mode, scrollRootRef, onActivePageChangeFromScroll, isProgrammaticScrollRef, activePageId]);
 
     if (mode === "scroll") {
         const pages = document.pages.slice().sort((a, b) => a.index - b.index);
@@ -134,7 +198,10 @@ export function CanvasView({
                                 page={p}
                                 showMargin={showMargin}
                                 active={p.id === activePageId}
-                                onActivate={() => setActivePageId?.(p.id)}
+                                onActivate={() => {
+                                    markManualSelect();
+                                    setActivePageId?.(p.id);
+                                }}
                                 rootRef={scrollRootRef}
                                 registerRef={(el) => {
                                     const prev = pageRefs.current[p.id];
@@ -146,11 +213,7 @@ export function CanvasView({
 
                                     if (el && pendingScrollToRef.current === p.id) {
                                         pendingScrollToRef.current = null;
-                                        if (isProgrammaticScrollRef) isProgrammaticScrollRef.current = true;
-                                        el.scrollIntoView({ behavior: "smooth", block: "start" });
-                                        window.setTimeout(() => {
-                                            if (isProgrammaticScrollRef) isProgrammaticScrollRef.current = false;
-                                        }, 450);
+                                        scrollAndLockTo(el);
                                     }
 
                                     // ✅ ถ้า el เป็น null (โดนถอด) เคลียร์ entry ที่ค้าง
@@ -189,7 +252,10 @@ export function CanvasView({
                     page={page}
                     showMargin={showMargin}
                     active
-                    onActivate={() => setActivePageId?.(page.id)}
+                    onActivate={() => {
+                        markManualSelect();
+                        setActivePageId?.(page.id);
+                    }}
                 />
             </div>
         </div>
@@ -202,6 +268,7 @@ function GapAdd({ onAdd, width = 820 }: { onAdd: () => void; width?: number }) {
 
     return (
         <div
+            data-gap="1"
             onClick={onAdd}
             onMouseEnter={() => setHover(true)}
             onMouseLeave={() => setHover(false)}

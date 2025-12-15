@@ -298,11 +298,7 @@ export function EditorApp() {
                         return (
                             <div
                                 key={p.id}
-                                onClick={() => {
-                                    isProgrammaticScrollRef.current = true;
-                                    setActivePageId(p.id);
-                                    setTimeout(() => (isProgrammaticScrollRef.current = false), 450);
-                                }}
+                                onClick={() => setActivePageId(p.id)}
                                 style={{
                                     padding: "8px 10px",
                                     border: "1px solid #e5e7eb",
