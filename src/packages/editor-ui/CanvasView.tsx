@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef } from "react";
-import type { DocumentJson } from "../editor-core/schema";
+import type { DocumentJson, PageJson } from "../editor-core/schema";
 
 import { GapAdd } from "./components/GapAdd";
 import { VirtualPage } from "./components/VirtualPage";
@@ -36,15 +36,22 @@ export function CanvasView({
     const pageRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const rootEl = scrollRootRef?.current ?? null;
 
+    /* ---------- helpers: pages ordered ---------- */
+    const pages: PageJson[] = useMemo(() => {
+        const order = document.pageOrder ?? [];
+        const byId = document.pagesById ?? ({} as any);
+        return order.map(id => byId[id]).filter(Boolean);
+    }, [document.pageOrder, document.pagesById]);
+
     /* ---------- page width helper ---------- */
     const pageWidthById = useMemo(() => {
-        const presetById = new Map(document.pagePresets.map(p => [p.id, p]));
+        const presetById = document.pagePresetsById ?? ({} as any);
         const out = new Map<string, number>();
-        for (const pg of document.pages) {
-            out.set(pg.id, presetById.get(pg.presetId)?.size.width ?? 820);
+        for (const pg of pages) {
+            out.set(pg.id, presetById[pg.presetId]?.size?.width ?? 820);
         }
         return out;
-    }, [document.pages, document.pagePresets]);
+    }, [pages, document.pagePresetsById]);
 
     const getPageWidth = (pageId: string) => pageWidthById.get(pageId) ?? 820;
 
@@ -65,7 +72,7 @@ export function CanvasView({
         onChange: setActivePageId,
         isProgrammaticScrollRef,
         lastManualSelectAtRef,
-        activeFromScrollRef, // ✅ เพิ่ม
+        activeFromScrollRef,
     });
 
     // ✅ scroll เฉพาะตอน “เลือกเอง”
@@ -90,10 +97,9 @@ export function CanvasView({
         if (!activePageId) return;
         nodesMock.ensureAround(activePageId, 2); // prefetch ±2
     }, [mode, activePageId, nodesMock]);
+
     /* ---------- render ---------- */
     if (mode === "scroll") {
-        const pages = document.pages.slice().sort((a, b) => a.index - b.index);
-
         return (
             <div style={{ padding: 24 }}>
                 <div style={{ zoom }}>
@@ -116,17 +122,22 @@ export function CanvasView({
                             {idx < pages.length - 1 && (
                                 <GapAdd
                                     width={getPageWidth(p.id)}
-                                    onAdd={() => { markManualSelect(); onAddPageAfter?.(p.id); }}
+                                    onAdd={() => {
+                                        markManualSelect();
+                                        onAddPageAfter?.(p.id);
+                                    }}
                                 />
                             )}
-
-
                         </React.Fragment>
                     ))}
+
                     {pages.length > 0 && (
                         <GapAdd
                             width={getPageWidth(pages[pages.length - 1].id)}
-                            onAdd={() => { markManualSelect(); onAddPageAfter?.(pages[pages.length - 1].id); }}
+                            onAdd={() => {
+                                markManualSelect();
+                                onAddPageAfter?.(pages[pages.length - 1].id);
+                            }}
                         />
                     )}
                 </div>
@@ -135,7 +146,7 @@ export function CanvasView({
     }
 
     /* ---------- single page mode ---------- */
-    const page = document.pages.find(p => p.id === activePageId) ?? null;
+    const page = activePageId ? (document.pagesById?.[activePageId] ?? null) : null;
     if (!page) return <div>no page</div>;
 
     return (

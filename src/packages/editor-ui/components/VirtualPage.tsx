@@ -28,8 +28,8 @@ export function VirtualPage({
     const [visible, setVisible] = React.useState(false);
     const holderRef = React.useRef<HTMLDivElement | null>(null);
 
-    const preset =
-        document.pagePresets.find((pp) => pp.id === page.presetId) ?? null;
+    // ✅ preset lookup แบบใหม่
+    const preset = document.pagePresetsById?.[page.presetId] ?? null;
 
     const pageH = preset?.size.height ?? 1100;
     const pageW = preset?.size.width ?? 820;

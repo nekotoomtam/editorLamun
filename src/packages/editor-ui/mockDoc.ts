@@ -6,29 +6,42 @@ export const mockDoc: DocumentJson = {
     version: 1,
     unit: "px",
 
-    pagePresets: [
-        {
+    // ===== Presets =====
+    pagePresetOrder: ["preset-a4"],
+    pagePresetsById: {
+        "preset-a4": {
             id: "preset-a4",
             name: "A4",
             size: { width: 800, height: 1100 },
             margin: { top: 40, right: 40, bottom: 40, left: 40 },
         },
-    ],
+    },
 
-    pages: [{ id: "page-1", index: 0, presetId: "preset-a4", name: "Page 1" }],
+    // ===== Pages =====
+    pageOrder: ["page-1"],
+    pagesById: {
+        "page-1": {
+            id: "page-1",
+            presetId: "preset-a4",
+            name: "Page 1",
+        },
+    },
 
+    // ===== Assets =====
     assets: {
-        images: [
-            {
+        imageOrder: ["img-1"],
+        imagesById: {
+            "img-1": {
                 id: "img-1",
                 type: "image",
                 src: "https://picsum.photos/400/240",
             },
-        ],
+        },
     },
 
-    nodes: [
-        {
+    // ===== Nodes =====
+    nodesById: {
+        "box-1": {
             id: "box-1",
             pageId: "page-1",
             type: "box",
@@ -38,9 +51,15 @@ export const mockDoc: DocumentJson = {
             w: 320,
             h: 160,
             z: 1,
-            style: { fill: "#f3f4f6", stroke: "#111827", strokeWidth: 1, radius: 8 },
+            style: {
+                fill: "#f3f4f6",
+                stroke: "#111827",
+                strokeWidth: 1,
+                radius: 8,
+            },
         },
-        {
+
+        "text-1": {
             id: "text-1",
             pageId: "page-1",
             type: "text",
@@ -61,7 +80,8 @@ export const mockDoc: DocumentJson = {
             },
             autosize: { mode: "height" },
         },
-        {
+
+        "img-node-1": {
             id: "img-node-1",
             pageId: "page-1",
             type: "image",
@@ -75,5 +95,15 @@ export const mockDoc: DocumentJson = {
             fit: "cover",
             opacity: 1,
         },
-    ],
+    },
+
+    nodeOrderByPageId: {
+        "page-1": ["box-1", "text-1", "img-node-1"],
+    },
+
+    // ===== Guides =====
+    guides: {
+        order: [],
+        byId: {},
+    },
 };

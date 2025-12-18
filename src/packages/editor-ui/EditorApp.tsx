@@ -11,18 +11,6 @@ function uid(prefix: string) {
     return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function sortPages(pages: PageJson[]) {
-    return pages.slice().sort((a, b) => a.index - b.index);
-}
-
-function reindexPages(pages: PageJson[]) {
-    return sortPages(pages).map((p, idx) => ({
-        ...p,
-        index: idx,
-        name: p.name ?? `Page ${idx + 1}`,
-    }));
-}
-
 function clamp(n: number, min: number, max: number) {
     return Math.max(min, Math.min(max, n));
 }
@@ -74,26 +62,26 @@ function ZoomBar({
     );
 }
 
-
 const MIN_LEFT = 200;
 const MAX_LEFT = 420;
 const MIN_RIGHT = 260;
 const MAX_RIGHT = 420;
 const LEFT_KEY = "editor:leftWidth";
 const RIGHT_KEY = "editor:rightWidth";
+
 export function EditorApp() {
     const [doc, setDoc] = useState<DocumentJson>(mockDoc);
     const centerRef = useRef<HTMLDivElement | null>(null);
+
+    // ✅ activePageId จาก schema ใหม่
     const [activePageId, setActivePageId] = useState<string | null>(
-        mockDoc.pages[0]?.id ?? null
+        mockDoc.pageOrder?.[0] ?? null
     );
+
     const rootRef = useRef<HTMLDivElement | null>(null);
     const [leftW, setLeftW] = useState(240);
     const [rightW, setRightW] = useState(320);
     const [mounted, setMounted] = useState(false);
-
-    type LeftMode = "thumb" | "list";
-    const [leftMode, setLeftMode] = useState<LeftMode>("thumb");
 
     useEffect(() => {
         setMounted(true);
@@ -116,12 +104,18 @@ export function EditorApp() {
 
     const [zoom, setZoom] = useState(1);
 
-    const pages = useMemo(() => sortPages(doc.pages), [doc.pages]);
+    // ✅ pages ตามลำดับจริงจาก pageOrder
+    const pages = useMemo(() => {
+        const order = doc.pageOrder ?? [];
+        const byId = doc.pagesById ?? ({} as any);
+        return order.map(id => byId[id]).filter(Boolean) as PageJson[];
+    }, [doc.pageOrder, doc.pagesById]);
 
     const activePage = useMemo(
-        () => pages.find((p) => p.id === activePageId) ?? null,
-        [pages, activePageId]
+        () => (activePageId ? (doc.pagesById?.[activePageId] ?? null) : null),
+        [doc.pagesById, activePageId]
     );
+
     useEffect(() => {
         const el = centerRef.current;
         if (!el) return;
@@ -138,7 +132,6 @@ export function EditorApp() {
         return () => el.removeEventListener("wheel", onWheel);
     }, [setZoom]);
 
-
     const draggingLeft = useRef(false);
     const draggingRight = useRef(false);
 
@@ -149,7 +142,7 @@ export function EditorApp() {
             if (draggingLeft.current) {
                 cancelAnimationFrame(raf);
                 raf = requestAnimationFrame(() => {
-                    setLeftW((w) =>
+                    setLeftW(() =>
                         Math.max(MIN_LEFT, Math.min(MAX_LEFT, e.clientX))
                     );
                 });
@@ -158,8 +151,10 @@ export function EditorApp() {
             if (draggingRight.current) {
                 cancelAnimationFrame(raf);
                 raf = requestAnimationFrame(() => {
-                    const rootW = rootRef.current?.getBoundingClientRect().width ?? window.innerWidth;
-                    const next = rootW - e.clientX; // ความกว้างจากขอบขวาของ root
+                    const rootW =
+                        rootRef.current?.getBoundingClientRect().width ??
+                        window.innerWidth;
+                    const next = rootW - e.clientX;
                     setRightW(Math.max(MIN_RIGHT, Math.min(MAX_RIGHT, next)));
                 });
             }
@@ -178,10 +173,15 @@ export function EditorApp() {
             window.removeEventListener("mouseup", onUp);
         };
     }, []);
-    // ====== Page actions ======
+
+    // ====== Page actions (schema ใหม่: pageOrder/pagesById) ======
+
+    function getDefaultPresetId(d: DocumentJson) {
+        return d.pagePresetOrder?.[0] ?? d.pagePresetOrder?.[0] ?? null;
+    }
 
     function addPageToEnd() {
-        const presetId = doc.pagePresets[0]?.id;
+        const presetId = doc.pagePresetOrder?.[0];
         if (!presetId) return;
 
         const newPageId = uid("page");
@@ -189,65 +189,105 @@ export function EditorApp() {
         const newPage: PageJson = {
             id: newPageId,
             presetId,
-            index: pages.length,
-            name: `Page ${pages.length + 1}`,
+            name: `Page ${(doc.pageOrder?.length ?? 0) + 1}`,
             visible: true,
             locked: false,
         };
 
-        const nextPages = reindexPages([...pages, newPage]);
-        setDoc((prev) => ({ ...prev, pages: nextPages }));
+        setDoc(prev => {
+            const pageOrder = [...(prev.pageOrder ?? []), newPageId];
+            const pagesById = { ...(prev.pagesById ?? {}), [newPageId]: newPage };
+
+            // init node order for this page
+            const nodeOrderByPageId = {
+                ...(prev.nodeOrderByPageId ?? {}),
+                [newPageId]: prev.nodeOrderByPageId?.[newPageId] ?? [],
+            };
+
+            return { ...prev, pageOrder, pagesById, nodeOrderByPageId };
+        });
+
         setActivePageId(newPageId);
     }
 
     function insertPageAfter(afterPageId: string) {
-        const presetId = doc.pagePresets[0]?.id;
+        const presetId = doc.pagePresetOrder?.[0];
         if (!presetId) return;
 
-        const after = pages.find((p) => p.id === afterPageId);
-        if (!after) return;
+        const order = doc.pageOrder ?? [];
+        const idx = order.indexOf(afterPageId);
+        if (idx < 0) return;
 
         const newPageId = uid("page");
-
-        const shifted = pages.map((p) =>
-            p.index > after.index ? { ...p, index: p.index + 1 } : p
-        );
 
         const newPage: PageJson = {
             id: newPageId,
             presetId,
-            index: after.index + 1,
-            name: `Page ${after.index + 2}`,
+            name: `Page ${idx + 2}`, // UI label เฉยๆ
             visible: true,
             locked: false,
         };
 
-        const nextPages = reindexPages([...shifted, newPage]);
-        setDoc((prev) => ({ ...prev, pages: nextPages }));
+        setDoc(prev => {
+            const prevOrder = prev.pageOrder ?? [];
+            const nextOrder = [
+                ...prevOrder.slice(0, idx + 1),
+                newPageId,
+                ...prevOrder.slice(idx + 1),
+            ];
+
+            const pagesById = { ...(prev.pagesById ?? {}), [newPageId]: newPage };
+
+            const nodeOrderByPageId = {
+                ...(prev.nodeOrderByPageId ?? {}),
+                [newPageId]: prev.nodeOrderByPageId?.[newPageId] ?? [],
+            };
+
+            return { ...prev, pageOrder: nextOrder, pagesById, nodeOrderByPageId };
+        });
+
         setActivePageId(newPageId);
     }
 
     function deleteActivePage() {
         if (!activePageId) return;
-        if (pages.length <= 1) return;
+        const order = doc.pageOrder ?? [];
+        if (order.length <= 1) return;
 
-        const removed = pages.filter((p) => p.id !== activePageId);
-        const nextPages = reindexPages(removed);
+        const idx = order.indexOf(activePageId);
+        if (idx < 0) return;
 
-        const nextIndex = Math.min(activePage?.index ?? 0, nextPages.length - 1);
-        const nextActive = nextPages[nextIndex];
+        const nextOrder = order.filter(id => id !== activePageId);
 
-        setDoc((prev) => ({ ...prev, pages: nextPages }));
-        setActivePageId(nextActive?.id ?? null);
+        const nextActiveId =
+            nextOrder[Math.min(idx, nextOrder.length - 1)] ?? nextOrder[0] ?? null;
+
+        setDoc(prev => {
+            const pagesById = { ...(prev.pagesById ?? {}) };
+            delete pagesById[activePageId];
+
+            const nodeOrderByPageId = { ...(prev.nodeOrderByPageId ?? {}) };
+            // ไม่จำเป็นต้องลบก็ได้ แต่ลบให้สะอาด
+            delete nodeOrderByPageId[activePageId];
+
+            // NOTE: ยังไม่ลบ nodes ของหน้านี้ (เพราะอาจมีระบบ recycle/undo)
+            // ถ้าต้องการลบจริงค่อยทำ sanitize ทีหลัง
+
+            return {
+                ...prev,
+                pageOrder: nextOrder,
+                pagesById,
+                nodeOrderByPageId,
+            };
+        });
+
+        setActivePageId(nextActiveId);
     }
 
     // ====== UI ======
 
     return (
         <div ref={rootRef} style={{ height: "100vh", overflow: "hidden", position: "relative" }}>
-            {/* Center: Canvas (เต็มจอ ไม่โดน push) */}
-
-
             <div style={{ position: "absolute", inset: 0, background: "#e5e7eb" }}>
                 <div ref={centerRef} style={{ height: "100%", overflow: "auto", padding: 16 }}>
                     <CanvasView
@@ -334,7 +374,7 @@ export function EditorApp() {
             <div
                 onMouseDown={(e) => {
                     e.preventDefault();
-                    draggingRight.current = true; // ✅ จุดนี้สำคัญ
+                    draggingRight.current = true;
                     document.body.style.userSelect = "none";
                 }}
                 style={{
@@ -349,6 +389,4 @@ export function EditorApp() {
             />
         </div>
     );
-
-
 }

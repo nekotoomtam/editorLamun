@@ -61,7 +61,8 @@ export function NodeView({ node, document }: { node: NodeJson; document: Documen
     }
 
     if (node.type === "image") {
-        const img: AssetImage | undefined = document.assets?.images.find((i) => i.id === node.assetId);
+        // ✅ asset lookup แบบใหม่
+        const img: AssetImage | undefined = document.assets?.imagesById?.[node.assetId];
         const src = img?.src ?? "";
 
         return (

@@ -1,5 +1,4 @@
 export type Id = string;
-
 export type Unit = "px" | "pui";
 
 export type DocumentJson = {
@@ -16,15 +15,29 @@ export type DocumentJson = {
 
     unit: Unit;
 
-    pagePresets: PagePreset[];
-    pages: PageJson[];
-    nodes: NodeJson[];
+    // ✅ presets
+    pagePresetOrder: Id[];
+    pagePresetsById: Record<Id, PagePreset>;
 
+    // ✅ pages
+    pageOrder: Id[];
+    pagesById: Record<Id, PageJson>;
+
+    // ✅ nodes
+    nodesById: Record<Id, NodeJson>;
+    nodeOrderByPageId: Record<Id, Id[]>;
+
+    // ✅ assets
     assets?: {
-        images: AssetImage[];
+        imageOrder: Id[];
+        imagesById: Record<Id, AssetImage>;
     };
 
-    guides?: GuideJson[];
+    // ✅ guides (doc-level)
+    guides?: {
+        order: Id[];
+        byId: Record<Id, GuideJson>;
+    };
 };
 
 export type PagePreset = {
@@ -36,7 +49,6 @@ export type PagePreset = {
 
 export type PageJson = {
     id: Id;
-    index: number;
     presetId: Id;
     name?: string;
     locked?: boolean;
@@ -60,7 +72,9 @@ export type NodeBase = {
     h: number;
     rotation?: number;
 
-    z: number;
+    // แนะนำให้เลิกใช้ทีหลัง แต่เก็บไว้ได้ถ้าของเดิมยังต้องใช้
+    z?: number;
+
     visible?: boolean;
     locked?: boolean;
 
@@ -72,6 +86,9 @@ export type NodeBase = {
         pinTop?: boolean;
         pinBottom?: boolean;
     };
+
+    // (optional) ถ้าจะทำ “ติดเส้น” แบบแปะ id เส้น
+    guideId?: Id | null;
 };
 
 export type TextNode = NodeBase & {
@@ -125,7 +142,7 @@ export type NodeJson = TextNode | BoxNode | ImageNode | GroupNode;
 export type AssetImage = {
     id: Id;
     type: "image";
-    src: string; // url/base64/file-id
+    src: string;
     mime?: string;
     width?: number;
     height?: number;
@@ -134,14 +151,19 @@ export type AssetImage = {
 
 export type GuideJson = {
     id: Id;
-    pageId: Id;
-    axis: "x" | "y";
+
+    // เส้นแนวตั้ง (x) วิ่งทุกหน้า
     pos: number;
-    name?: string;
+
+    // batch align ของเส้นนี้
+    align?: "left" | "center" | "right";
+
+    // เปิด TOC
+    tocEnabled?: boolean;
+    tocKey?: string;
+
+    label?: string;
+
     locked?: boolean;
     visible?: boolean;
-    snap?: {
-        enabled: boolean;
-        strength?: number; // 0..1
-    };
 };

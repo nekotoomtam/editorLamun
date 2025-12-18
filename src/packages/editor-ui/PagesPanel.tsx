@@ -35,10 +35,23 @@ export function PagesPanel({
         localStorage.setItem(MODE_KEY, mode);
     }, [mode]);
 
+    // ✅ preset lookup แบบใหม่
     const presetById = useMemo(() => {
-        const m = new Map(doc.pagePresets.map(p => [p.id, p]));
+        return doc.pagePresetsById ?? ({} as any);
+    }, [doc.pagePresetsById]);
+
+    // ✅ pageId -> index (จาก pageOrder)
+    const pageIndexById = useMemo(() => {
+        const m = new Map<string, number>();
+        const order = doc.pageOrder ?? [];
+        order.forEach((id, i) => m.set(id, i));
         return m;
-    }, [doc.pagePresets]);
+    }, [doc.pageOrder]);
+
+    const getPageNumber = (pageId: string) => {
+        const idx = pageIndexById.get(pageId);
+        return (idx ?? 0) + 1;
+    };
 
     const THUMB_W = Math.max(120, Math.min(200, leftW - 32)); // ปรับตาม panel
 
@@ -74,6 +87,8 @@ export function PagesPanel({
                 {mode === "list" ? (
                     pages.map((p) => {
                         const active = p.id === activePageId;
+                        const pageNo = getPageNumber(p.id);
+
                         return (
                             <div
                                 key={p.id}
@@ -86,22 +101,23 @@ export function PagesPanel({
                                     background: active ? "#f3f4f6" : "#fff",
                                 }}
                             >
-                                <div style={{ fontWeight: 600 }}>{p.name ?? `Page ${p.index + 1}`}</div>
-                                <div style={{ fontSize: 12, color: "#6b7280" }}>index: {p.index}</div>
+                                <div style={{ fontWeight: 600 }}>{p.name ?? `Page ${pageNo}`}</div>
+                                <div style={{ fontSize: 12, color: "#6b7280" }}>#{pageNo}</div>
                             </div>
                         );
                     })
                 ) : (
                     <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
                         {pages.map((p) => {
-                            const preset = presetById.get(p.presetId);
-                            const pw = preset?.size.width ?? 820;
-                            const ph = preset?.size.height ?? 1100;
+                            const preset = presetById[p.presetId];
+                            const pw = preset?.size?.width ?? 820;
+                            const ph = preset?.size?.height ?? 1100;
 
                             const scale = THUMB_W / pw;
                             const thumbH = Math.round(ph * scale);
 
                             const active = p.id === activePageId;
+                            const pageNo = getPageNumber(p.id);
 
                             return (
                                 <div
@@ -116,8 +132,8 @@ export function PagesPanel({
                                     }}
                                 >
                                     <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
-                                        <span>{p.name ?? `Page ${p.index + 1}`}</span>
-                                        <span style={{ fontWeight: 700 }}>#{p.index + 1}</span>
+                                        <span>{p.name ?? `Page ${pageNo}`}</span>
+                                        <span style={{ fontWeight: 700 }}>#{pageNo}</span>
                                     </div>
 
                                     <div
@@ -128,7 +144,7 @@ export function PagesPanel({
                                             overflow: "hidden",
                                             borderRadius: 10,
                                             background: "#fff",
-                                            border: "1px solid rgba(0,0,0,0.08)", // ✅ เพิ่ม
+                                            border: "1px solid rgba(0,0,0,0.08)",
                                         }}
                                     >
                                         <div
@@ -144,7 +160,7 @@ export function PagesPanel({
                                                 page={p}
                                                 showMargin={false}
                                                 active={false}
-                                                renderNodes={false}  // ✅ thumbnail ไม่ต้อง render node
+                                                renderNodes={false} // ✅ thumbnail ไม่ต้อง render node
                                             />
                                         </div>
                                     </div>

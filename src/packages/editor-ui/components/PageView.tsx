@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import type { DocumentJson, PageJson, PagePreset } from "../../editor-core/schema";
+import type { DocumentJson, PageJson } from "../../editor-core/schema";
 import { NodeView } from "./NodeView";
 
 export function PageView({
@@ -12,8 +12,8 @@ export function PageView({
     onActivate,
     registerRef,
     loading,
-    renderNodes = true,    // ✅ เพิ่ม
-    thumbPreview = false
+    renderNodes = true,
+    thumbPreview = false,
 }: {
     document: DocumentJson;
     page: PageJson;
@@ -22,29 +22,40 @@ export function PageView({
     onActivate?: () => void;
     registerRef?: (el: HTMLDivElement | null) => void;
     loading?: boolean;
-    renderNodes?: boolean;       // ✅ เพิ่ม
-    thumbPreview?: boolean
+    renderNodes?: boolean;
+    thumbPreview?: boolean;
 }) {
-    const preset = document.pagePresets.find(pp => pp.id === page.presetId) ?? null;
+    // ✅ preset lookup แบบใหม่
+    const preset = document.pagePresetsById?.[page.presetId] ?? null;
     if (!preset) return <div>no preset</div>;
 
+    // ✅ nodes lookup แบบใหม่ (byId + order)
     const nodes = useMemo(() => {
         if (!renderNodes) return [];
-        let list = document.nodes
-            .filter(n => n.pageId === page.id && n.visible !== false)
-            .slice()
-            .sort((a, b) => a.z - b.z);
 
+        const order = document.nodeOrderByPageId?.[page.id] ?? [];
+        let list = order
+            .map(id => document.nodesById?.[id])
+            .filter(n => n && n.visible !== false);
+
+        // thumb preview เอาแค่ text + จำกัดจำนวน
         if (thumbPreview) {
-            list = list
-                .filter(n => n.type === "text")   // เอาแค่ text
-                .slice(0, 8);                      // จำกัดจำนวน
+            list = list.filter(n => n.type === "text").slice(0, 8);
         }
+
         return list;
-    }, [document.nodes, page.id, renderNodes, thumbPreview]);
+    }, [
+        document.nodeOrderByPageId,
+        document.nodesById,
+        page.id,
+        renderNodes,
+        thumbPreview,
+    ]);
 
-    const margin = page.override?.margin ? { ...preset.margin, ...page.override.margin } : preset.margin;
-
+    // ✅ margin override
+    const margin = page.override?.margin
+        ? { ...preset.margin, ...page.override.margin }
+        : preset.margin;
 
     return (
         <div
@@ -86,6 +97,7 @@ export function PageView({
                     <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
                 </div>
             )}
+
             {showMargin && (
                 <div
                     style={{
@@ -101,9 +113,14 @@ export function PageView({
                 />
             )}
 
-            {renderNodes && nodes.map(n => (   // ✅ กันไว้ชัด ๆ
-                <NodeView key={n.id} node={n} document={document} />
-            ))}
+            {renderNodes &&
+                nodes.map(n => (
+                    <NodeView
+                        key={n.id}
+                        node={n}
+                        document={document}
+                    />
+                ))}
         </div>
     );
 }

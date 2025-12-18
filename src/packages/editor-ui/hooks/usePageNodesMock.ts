@@ -6,16 +6,15 @@ import type { DocumentJson } from "../../editor-core/schema";
 type PageId = string;
 
 export function usePageNodesMock(doc: DocumentJson) {
-    const pagesSorted = useMemo(
-        () => doc.pages.slice().sort((a, b) => a.index - b.index),
-        [doc.pages]
-    );
+    // ✅ page ids ตามลำดับจริง
+    const pageOrder = useMemo(() => doc.pageOrder ?? [], [doc.pageOrder]);
 
+    // ✅ map pageId -> index (จาก order)
     const pageIndexById = useMemo(() => {
         const m = new Map<string, number>();
-        pagesSorted.forEach((p, i) => m.set(p.id, i));
+        pageOrder.forEach((id, i) => m.set(id, i));
         return m;
-    }, [pagesSorted]);
+    }, [pageOrder]);
 
     // UI state (ไว้ให้ react rerender)
     const [loadingSet, setLoadingSet] = useState<Set<PageId>>(() => new Set());
@@ -78,10 +77,10 @@ export function usePageNodesMock(doc: DocumentJson) {
         if (idx == null) return;
 
         for (let d = -radius; d <= radius; d++) {
-            const p = pagesSorted[idx + d];
-            if (p) ensure(p.id);
+            const pageId = pageOrder[idx + d];
+            if (pageId) ensure(pageId);
         }
-    }, [ensure, pageIndexById, pagesSorted]);
+    }, [ensure, pageIndexById, pageOrder]);
 
     const isLoading = useCallback((pageId: PageId) => loadingSet.has(pageId), [loadingSet]);
     const isLoaded = useCallback((pageId: PageId) => loadedSet.has(pageId), [loadedSet]);
