@@ -181,70 +181,78 @@ export function EditorApp() {
     }
 
     function addPageToEnd() {
-        const presetId = doc.pagePresetOrder?.[0];
+        const lastPageId = doc.pageOrder[doc.pageOrder.length - 1];
+        const lastPage = lastPageId ? doc.pagesById[lastPageId] : null;
+
+        const presetId =
+            lastPage?.presetId ??
+            doc.pagePresetOrder[0] ?? // fallback
+            Object.keys(doc.pagePresetsById)[0];
+
         if (!presetId) return;
 
         const newPageId = uid("page");
 
-        const newPage: PageJson = {
-            id: newPageId,
-            presetId,
-            name: `Page ${(doc.pageOrder?.length ?? 0) + 1}`,
-            visible: true,
-            locked: false,
-        };
+        const nextPageOrder = [...doc.pageOrder, newPageId];
 
-        setDoc(prev => {
-            const pageOrder = [...(prev.pageOrder ?? []), newPageId];
-            const pagesById = { ...(prev.pagesById ?? {}), [newPageId]: newPage };
-
-            // init node order for this page
-            const nodeOrderByPageId = {
-                ...(prev.nodeOrderByPageId ?? {}),
-                [newPageId]: prev.nodeOrderByPageId?.[newPageId] ?? [],
-            };
-
-            return { ...prev, pageOrder, pagesById, nodeOrderByPageId };
-        });
+        setDoc(prev => ({
+            ...prev,
+            pageOrder: nextPageOrder,
+            pagesById: {
+                ...prev.pagesById,
+                [newPageId]: {
+                    id: newPageId,
+                    presetId,
+                    name: `Page ${nextPageOrder.length}`,
+                    visible: true,
+                    locked: false,
+                    // override: lastPage?.override ? structuredClone(lastPage.override) : undefined, // ถ้าจะ clone ด้วย
+                },
+            },
+            nodeOrderByPageId: {
+                ...prev.nodeOrderByPageId,
+                [newPageId]: [],
+            },
+        }));
 
         setActivePageId(newPageId);
     }
 
     function insertPageAfter(afterPageId: string) {
-        const presetId = doc.pagePresetOrder?.[0];
-        if (!presetId) return;
+        const after = doc.pagesById[afterPageId];
+        if (!after) return;
 
-        const order = doc.pageOrder ?? [];
-        const idx = order.indexOf(afterPageId);
-        if (idx < 0) return;
-
+        const presetId = after.presetId;
         const newPageId = uid("page");
 
-        const newPage: PageJson = {
-            id: newPageId,
-            presetId,
-            name: `Page ${idx + 2}`, // UI label เฉยๆ
-            visible: true,
-            locked: false,
-        };
+        const idx = doc.pageOrder.indexOf(afterPageId);
+        if (idx < 0) return;
 
-        setDoc(prev => {
-            const prevOrder = prev.pageOrder ?? [];
-            const nextOrder = [
-                ...prevOrder.slice(0, idx + 1),
-                newPageId,
-                ...prevOrder.slice(idx + 1),
-            ];
+        const nextPageOrder = [
+            ...doc.pageOrder.slice(0, idx + 1),
+            newPageId,
+            ...doc.pageOrder.slice(idx + 1),
+        ];
 
-            const pagesById = { ...(prev.pagesById ?? {}), [newPageId]: newPage };
-
-            const nodeOrderByPageId = {
-                ...(prev.nodeOrderByPageId ?? {}),
-                [newPageId]: prev.nodeOrderByPageId?.[newPageId] ?? [],
-            };
-
-            return { ...prev, pageOrder: nextOrder, pagesById, nodeOrderByPageId };
-        });
+        setDoc(prev => ({
+            ...prev,
+            pageOrder: nextPageOrder,
+            pagesById: {
+                ...prev.pagesById,
+                [newPageId]: {
+                    id: newPageId,
+                    presetId,
+                    name: `Page ${idx + 2}`,
+                    visible: true,
+                    locked: false,
+                    // override: after.override ? structuredClone(after.override) : undefined, // ถ้าจะ clone
+                },
+            },
+            nodeOrderByPageId: {
+                ...prev.nodeOrderByPageId,
+                [newPageId]: [],
+            },
+        }));
 
         setActivePageId(newPageId);
     }
@@ -285,6 +293,7 @@ export function EditorApp() {
     }
 
     // ====== UI ======
+
 
     return (
         <div ref={rootRef} style={{ height: "100vh", overflow: "hidden", position: "relative" }}>
@@ -366,7 +375,7 @@ export function EditorApp() {
                 }}
             >
                 <div style={{ flex: 1, overflow: "auto" }}>
-                    <Inspector />
+                    <Inspector doc={doc} activePageId={activePageId} setDoc={setDoc} />
                 </div>
             </div>
 

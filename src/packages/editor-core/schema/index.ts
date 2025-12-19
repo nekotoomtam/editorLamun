@@ -1,6 +1,8 @@
 export type Id = string;
 export type Unit = "px" | "pui";
 
+
+
 export type DocumentJson = {
     id: Id;
     name: string;
@@ -45,6 +47,9 @@ export type PagePreset = {
     name: string;
     size: { width: number; height: number };
     margin: { top: number; right: number; bottom: number; left: number };
+    source?: "system" | "custom"
+    locked?: boolean;              // ล็อกโครงกระดาษ
+    usageHint?: string;            // ข้อความบอกเจตนา
 };
 
 export type PageJson = {
@@ -167,3 +172,29 @@ export type GuideJson = {
     locked?: boolean;
     visible?: boolean;
 };
+
+export function normalizePresetOrientation(
+    preset: PagePreset,
+    mode: "portrait" | "landscape"
+): PagePreset {
+    const { width, height } = preset.size;
+
+    if (mode === "portrait" && width > height) {
+        return {
+            ...preset,
+            size: { width: height, height: width },
+        };
+    }
+
+    if (mode === "landscape" && height > width) {
+        return {
+            ...preset,
+            size: { width: height, height: width },
+        };
+    }
+
+    return preset;
+}
+
+export const getOrientation = (p: PagePreset) =>
+    p.size.width > p.size.height ? "landscape" : "portrait";

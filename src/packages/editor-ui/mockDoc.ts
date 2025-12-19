@@ -7,23 +7,43 @@ export const mockDoc: DocumentJson = {
     unit: "px",
 
     // ===== Presets =====
-    pagePresetOrder: ["preset-a4"],
+    pagePresetOrder: ["preset-a4", "preset-custom-1"],
     pagePresetsById: {
         "preset-a4": {
             id: "preset-a4",
-            name: "A4",
+            name: "A4 (Official)",
             size: { width: 800, height: 1100 },
             margin: { top: 40, right: 40, bottom: 40, left: 40 },
+            source: "system",
+            locked: true,
+            usageHint: "ใช้สำหรับเอกสารทางการ / ส่งราชการ",
+        },
+        "preset-custom-1": {
+            id: "preset-custom-1",
+            name: "Custom (Landscape)",
+            size: { width: 1000, height: 700 },
+            margin: { top: 32, right: 32, bottom: 32, left: 32 },
+            source: "custom",
+
         },
     },
 
     // ===== Pages =====
-    pageOrder: ["page-1"],
+    pageOrder: ["page-1", "page-2"],
     pagesById: {
         "page-1": {
             id: "page-1",
             presetId: "preset-a4",
             name: "Page 1",
+            visible: true,
+            locked: false,
+        },
+        "page-2": {
+            id: "page-2",
+            presetId: "preset-custom-1",
+            name: "Page 2",
+            visible: true,
+            locked: false,
         },
     },
 
@@ -51,6 +71,8 @@ export const mockDoc: DocumentJson = {
             w: 320,
             h: 160,
             z: 1,
+            visible: true,
+            locked: false,
             style: {
                 fill: "#f3f4f6",
                 stroke: "#111827",
@@ -69,6 +91,8 @@ export const mockDoc: DocumentJson = {
             w: 520,
             h: 40,
             z: 2,
+            visible: true,
+            locked: false,
             text: "Hello Editor 👋",
             style: {
                 fontFamily: "system-ui",
@@ -91,6 +115,8 @@ export const mockDoc: DocumentJson = {
             w: 280,
             h: 180,
             z: 3,
+            visible: true,
+            locked: false,
             assetId: "img-1",
             fit: "cover",
             opacity: 1,
@@ -99,6 +125,7 @@ export const mockDoc: DocumentJson = {
 
     nodeOrderByPageId: {
         "page-1": ["box-1", "text-1", "img-node-1"],
+        "page-2": [], // ✅ กัน undefined
     },
 
     // ===== Guides =====
