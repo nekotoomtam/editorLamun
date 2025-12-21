@@ -44,6 +44,7 @@ export function CanvasView({
     zoom = 1,
     setActivePageId,
     scrollRootRef,
+    onViewingPageIdChange
 }: {
     document: DocumentJson;
     activePageId: string | null;
@@ -53,6 +54,7 @@ export function CanvasView({
     zoom?: number;
     setActivePageId?: (pageId: string) => void;
     scrollRootRef?: React.RefObject<HTMLElement | null>;
+    onViewingPageIdChange?: (pageId: string | null) => void;
 }) {
     /* ---------- shared refs ---------- */
     const pageRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -162,6 +164,12 @@ export function CanvasView({
         0,
         Math.min(pages.length - 1, forcedAnchorIndex ?? viewportAnchorIndex)
     );
+
+    useEffect(() => {
+        if (mode !== "scroll") return;
+        const p = pages[anchorIndex];
+        onViewingPageIdChange?.(p?.id ?? null);
+    }, [mode, anchorIndex, pages, onViewingPageIdChange]);
     /* ---------- render ---------- */
     if (mode === "scroll") {
         return (

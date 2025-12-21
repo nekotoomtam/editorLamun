@@ -82,7 +82,7 @@ export function EditorApp() {
     const [leftW, setLeftW] = useState(240);
     const [rightW, setRightW] = useState(320);
     const [mounted, setMounted] = useState(false);
-
+    const [viewingPageId, setViewingPageId] = useState<string | null>(activePageId);
     useEffect(() => {
         setMounted(true);
 
@@ -307,6 +307,7 @@ export function EditorApp() {
                         zoom={zoom}
                         scrollRootRef={centerRef}
                         onAddPageAfter={insertPageAfter}
+                        onViewingPageIdChange={setViewingPageId}
                     />
                 </div>
 
@@ -338,6 +339,7 @@ export function EditorApp() {
                     addPageToEnd={addPageToEnd}
                     deleteActivePage={deleteActivePage}
                     leftW={leftW}
+                    viewingPageId={viewingPageId}
                 />
             </div>
 

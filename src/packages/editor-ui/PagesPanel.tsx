@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useEffect, useState } from "react";
+import React, { useMemo, useEffect, useState, useRef } from "react";
 import type { DocumentJson, PageJson } from "../editor-core/schema";
 import { PageView } from "./components/PageView";
 
@@ -11,6 +11,7 @@ export function PagesPanel({
     doc,
     pages,
     activePageId,
+    viewingPageId,          // ✅ เพิ่ม
     setActivePageId,
     addPageToEnd,
     deleteActivePage,
@@ -19,12 +20,15 @@ export function PagesPanel({
     doc: DocumentJson;
     pages: PageJson[];
     activePageId: string | null;
+    viewingPageId: string | null;   // ✅ เพิ่ม
     setActivePageId: (id: string) => void;
     addPageToEnd: () => void;
     deleteActivePage: () => void;
     leftW: number;
 }) {
     const [mode, setMode] = useState<Mode>("list");
+    const scrollRef = useRef<HTMLDivElement | null>(null);
+    const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
     useEffect(() => {
         const m = (localStorage.getItem(MODE_KEY) as Mode) || "list";
@@ -55,6 +59,18 @@ export function PagesPanel({
 
     const THUMB_W = Math.max(120, Math.min(200, leftW - 32)); // ปรับตาม panel
 
+    useEffect(() => {
+        if (!viewingPageId) return;
+        const container = scrollRef.current;
+        if (!container) return;
+
+        const el = itemRefs.current[viewingPageId];
+        if (!el) return;
+
+        el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }, [viewingPageId, mode]);
+
+
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             <div style={{ padding: 12, borderBottom: "1px solid #e5e7eb" }}>
@@ -83,22 +99,27 @@ export function PagesPanel({
                 </div>
             </div>
 
-            <div style={{ flex: 1, overflow: "auto", padding: 8 }}>
+            <div ref={scrollRef} style={{ flex: 1, overflow: "auto", padding: 8 }}>
                 {mode === "list" ? (
                     pages.map((p) => {
+                        const viewing = p.id === viewingPageId;
                         const active = p.id === activePageId;
                         const pageNo = getPageNumber(p.id);
 
                         return (
                             <div
                                 key={p.id}
+                                ref={(el) => {
+                                    itemRefs.current[p.id] = el;
+                                }}
                                 onClick={() => setActivePageId(p.id)}
                                 style={{
                                     padding: "8px 10px",
-                                    border: "1px solid #e5e7eb",
+
                                     marginBottom: 8,
                                     cursor: "pointer",
-                                    background: active ? "#f3f4f6" : "#fff",
+                                    background: active ? "#f3f4f6" : viewing ? "rgba(59,130,246,0.08)" : "#fff",
+                                    border: active ? "1px solid rgba(59,130,246,0.9)" : "1px solid #e5e7eb",
                                 }}
                             >
                                 <div style={{ fontWeight: 600 }}>{p.name ?? `Page ${pageNo}`}</div>
@@ -116,19 +137,24 @@ export function PagesPanel({
                             const scale = THUMB_W / pw;
                             const thumbH = Math.round(ph * scale);
 
+                            const viewing = p.id === viewingPageId;
                             const active = p.id === activePageId;
                             const pageNo = getPageNumber(p.id);
 
                             return (
                                 <div
                                     key={p.id}
+                                    ref={(el) => {
+                                        itemRefs.current[p.id] = el;
+                                    }}
                                     onClick={() => setActivePageId(p.id)}
                                     style={{
                                         cursor: "pointer",
-                                        border: active ? "2px solid rgba(59,130,246,0.9)" : "1px solid #e5e7eb",
+                                        background: active ? "#f3f4f6" : viewing ? "rgba(59,130,246,0.08)" : "#fff",
+                                        border: active ? "1px solid rgba(59,130,246,0.9)" : "1px solid #e5e7eb",
                                         borderRadius: 10,
                                         padding: 8,
-                                        background: "#fff",
+
                                     }}
                                 >
                                     <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
