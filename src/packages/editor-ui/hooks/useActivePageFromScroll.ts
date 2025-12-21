@@ -9,7 +9,8 @@ export function useActivePageFromScroll({
     onChange,
     isProgrammaticScrollRef,
     lastManualSelectAtRef,
-    activeFromScrollRef
+    activeFromScrollRef,
+    pageIds
 }: {
     rootEl: HTMLElement | null;
     pageRefs: React.RefObject<Record<string, HTMLDivElement | null>>;
@@ -18,6 +19,7 @@ export function useActivePageFromScroll({
     isProgrammaticScrollRef: React.RefObject<boolean>;
     lastManualSelectAtRef: React.RefObject<number>;
     activeFromScrollRef: React.RefObject<boolean>;
+    pageIds: string[];
 }) {
     const seen = useRef<Record<string, IntersectionObserverEntry>>({});
     const rafPick = useRef<number | null>(null);
@@ -86,6 +88,7 @@ export function useActivePageFromScroll({
         rootEl,
         onChange,
         activePageId,
+        pageIds.join("|"),
         pageRefs,
         isProgrammaticScrollRef,
         lastManualSelectAtRef,

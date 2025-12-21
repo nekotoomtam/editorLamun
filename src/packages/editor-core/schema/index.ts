@@ -68,7 +68,7 @@ export type NodeBase = {
     id: Id;
     pageId: Id;
 
-    type: "text" | "box" | "image" | "group";
+    type: "text" | "box" | "image" | "group" | "field";
     name?: string;
 
     x: number;
@@ -78,8 +78,6 @@ export type NodeBase = {
     rotation?: number;
 
     // แนะนำให้เลิกใช้ทีหลัง แต่เก็บไว้ได้ถ้าของเดิมยังต้องใช้
-    z?: number;
-
     visible?: boolean;
     locked?: boolean;
 
@@ -142,7 +140,12 @@ export type GroupNode = NodeBase & {
     children: Id[];
 };
 
-export type NodeJson = TextNode | BoxNode | ImageNode | GroupNode;
+export type NodeJson =
+    | TextNode
+    | BoxNode
+    | ImageNode
+    | GroupNode
+    | FieldNode;
 
 export type AssetImage = {
     id: Id;
@@ -171,6 +174,40 @@ export type GuideJson = {
 
     locked?: boolean;
     visible?: boolean;
+};
+
+export type FieldType =
+    | "text"
+    | "number"
+    | "date"
+    | "select"
+    | "checkbox";
+
+export type FieldNode = NodeBase & {
+    type: "field";
+
+    // key สำหรับ map JSON
+    key: string;
+
+    // label สำหรับ form / user
+    label: string;
+
+    // คำอธิบายว่ากรอกอะไร
+    hint?: string;
+
+    fieldType: FieldType;
+
+    required?: boolean;
+
+    visibility?: "both" | "canvas" | "form" | "hidden";
+
+    options?: {
+        label: string;
+        value: string | number;
+    }[];
+
+    // เตรียมไว้สำหรับอนาคต (ยังไม่ต้องใช้)
+    valueExpr?: string;
 };
 
 export function normalizePresetOrientation(

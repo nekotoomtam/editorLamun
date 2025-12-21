@@ -70,7 +70,7 @@ export const mockDoc: DocumentJson = {
             y: 120,
             w: 320,
             h: 160,
-            z: 1,
+
             visible: true,
             locked: false,
             style: {
@@ -90,7 +90,7 @@ export const mockDoc: DocumentJson = {
             y: 90,
             w: 520,
             h: 40,
-            z: 2,
+
             visible: true,
             locked: false,
             text: "Hello Editor 👋",
@@ -114,7 +114,7 @@ export const mockDoc: DocumentJson = {
             y: 140,
             w: 280,
             h: 180,
-            z: 3,
+
             visible: true,
             locked: false,
             assetId: "img-1",
