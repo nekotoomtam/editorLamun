@@ -1,15 +1,13 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { mockDoc } from "./mockDoc";
+import { useEditorStore } from "./store/editorStore";
 import { CanvasView } from "./CanvasView";
 import { Inspector } from "./Inspector";
-import type { DocumentJson, PageJson } from "../editor-core/schema";
+import type { PageJson } from "../editor-core/schema";
 import { PagesPanel } from "./PagesPanel";
 
-function uid(prefix: string) {
-    return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
-}
+
 
 function clamp(n: number, min: number, max: number) {
     return Math.max(min, Math.min(max, n));
@@ -20,7 +18,7 @@ function ZoomBar({
     setZoom,
 }: {
     zoom: number;
-    setZoom: React.Dispatch<React.SetStateAction<number>>;
+    setZoom: (z: number) => void
 }) {
     return (
         <div
@@ -38,9 +36,7 @@ function ZoomBar({
             }}
         >
             <button
-                onClick={() =>
-                    setZoom((z) => clamp(Number((z - 0.1).toFixed(2)), 0.25, 3))
-                }
+                onClick={() => setZoom(clamp(Number((zoom - 0.1).toFixed(2)), 0.25, 3))}
             >
                 -
             </button>
@@ -50,9 +46,7 @@ function ZoomBar({
             </div>
 
             <button
-                onClick={() =>
-                    setZoom((z) => clamp(Number((z + 0.1).toFixed(2)), 0.25, 3))
-                }
+                onClick={() => setZoom(clamp(Number((zoom + 0.1).toFixed(2)), 0.25, 3))}
             >
                 +
             </button>
@@ -70,19 +64,47 @@ const LEFT_KEY = "editor:leftWidth";
 const RIGHT_KEY = "editor:rightWidth";
 
 export function EditorApp() {
-    const [doc, setDoc] = useState<DocumentJson>(mockDoc);
+    const {
+        doc, session,
+        setActivePage, setZoom,
+        addPageToEnd, insertPageAfter, deleteActivePage,
+    } = useEditorStore();
+
     const centerRef = useRef<HTMLDivElement | null>(null);
-
-    // ✅ activePageId จาก schema ใหม่
-    const [activePageId, setActivePageId] = useState<string | null>(
-        mockDoc.pageOrder?.[0] ?? null
-    );
-
     const rootRef = useRef<HTMLDivElement | null>(null);
+
     const [leftW, setLeftW] = useState(240);
     const [rightW, setRightW] = useState(320);
     const [mounted, setMounted] = useState(false);
-    const [viewingPageId, setViewingPageId] = useState<string | null>(activePageId);
+
+    // viewingPageId จะเก็บ local ก็ได้ (หรือจะย้ายเข้า store ทีหลัง)
+    const [viewingPageId, setViewingPageId] = useState<string | null>(session.activePageId);
+
+    const activePageId = session.activePageId;
+    const zoom = session.zoom;
+
+    useEffect(() => {
+        setViewingPageId(session.activePageId);
+    }, [session.activePageId]);
+
+    useEffect(() => {
+        const el = centerRef.current;
+        if (!el) return;
+
+        const onWheel = (e: WheelEvent) => {
+            if (!e.ctrlKey) return;
+            e.preventDefault();
+
+            const step = e.deltaY > 0 ? -0.1 : 0.1;
+            setZoom(clamp(Number((zoom + step).toFixed(2)), 0.25, 3));
+        };
+
+        el.addEventListener("wheel", onWheel, { passive: false });
+        return () => el.removeEventListener("wheel", onWheel);
+    }, [setZoom, zoom]);
+
+
+
     useEffect(() => {
         setMounted(true);
 
@@ -102,35 +124,13 @@ export function EditorApp() {
         localStorage.setItem(RIGHT_KEY, String(rightW));
     }, [rightW, mounted]);
 
-    const [zoom, setZoom] = useState(1);
-
     // ✅ pages ตามลำดับจริงจาก pageOrder
     const pages = useMemo(() => {
-        const order = doc.pageOrder ?? [];
-        const byId = doc.pagesById ?? ({} as any);
-        return order.map(id => byId[id]).filter(Boolean) as PageJson[];
+        return doc.pageOrder.map((id) => doc.pagesById[id]).filter(Boolean) as PageJson[];
     }, [doc.pageOrder, doc.pagesById]);
 
-    const activePage = useMemo(
-        () => (activePageId ? (doc.pagesById?.[activePageId] ?? null) : null),
-        [doc.pagesById, activePageId]
-    );
 
-    useEffect(() => {
-        const el = centerRef.current;
-        if (!el) return;
 
-        const onWheel = (e: WheelEvent) => {
-            if (!e.ctrlKey) return;
-            e.preventDefault();
-
-            const step = e.deltaY > 0 ? -0.1 : 0.1;
-            setZoom((z) => clamp(Number((z + step).toFixed(2)), 0.25, 3));
-        };
-
-        el.addEventListener("wheel", onWheel, { passive: false });
-        return () => el.removeEventListener("wheel", onWheel);
-    }, [setZoom]);
 
     const draggingLeft = useRef(false);
     const draggingRight = useRef(false);
@@ -176,125 +176,6 @@ export function EditorApp() {
 
     // ====== Page actions (schema ใหม่: pageOrder/pagesById) ======
 
-    function getDefaultPresetId(d: DocumentJson) {
-        return d.pagePresetOrder?.[0] ?? d.pagePresetOrder?.[0] ?? null;
-    }
-
-    function addPageToEnd() {
-        const lastPageId = doc.pageOrder[doc.pageOrder.length - 1];
-        const lastPage = lastPageId ? doc.pagesById[lastPageId] : null;
-
-        const presetId =
-            lastPage?.presetId ??
-            doc.pagePresetOrder[0] ?? // fallback
-            Object.keys(doc.pagePresetsById)[0];
-
-        if (!presetId) return;
-
-        const newPageId = uid("page");
-
-        const nextPageOrder = [...doc.pageOrder, newPageId];
-
-        setDoc(prev => ({
-            ...prev,
-            pageOrder: nextPageOrder,
-            pagesById: {
-                ...prev.pagesById,
-                [newPageId]: {
-                    id: newPageId,
-                    presetId,
-                    name: `Page ${nextPageOrder.length}`,
-                    visible: true,
-                    locked: false,
-                    // override: lastPage?.override ? structuredClone(lastPage.override) : undefined, // ถ้าจะ clone ด้วย
-                },
-            },
-            nodeOrderByPageId: {
-                ...prev.nodeOrderByPageId,
-                [newPageId]: [],
-            },
-        }));
-
-        setActivePageId(newPageId);
-    }
-
-    function insertPageAfter(afterPageId: string) {
-        const after = doc.pagesById[afterPageId];
-        if (!after) return;
-
-        const presetId = after.presetId;
-        const newPageId = uid("page");
-
-        const idx = doc.pageOrder.indexOf(afterPageId);
-        if (idx < 0) return;
-
-        const nextPageOrder = [
-            ...doc.pageOrder.slice(0, idx + 1),
-            newPageId,
-            ...doc.pageOrder.slice(idx + 1),
-        ];
-
-        setDoc(prev => ({
-            ...prev,
-            pageOrder: nextPageOrder,
-            pagesById: {
-                ...prev.pagesById,
-                [newPageId]: {
-                    id: newPageId,
-                    presetId,
-                    name: `Page ${idx + 2}`,
-                    visible: true,
-                    locked: false,
-                    // override: after.override ? structuredClone(after.override) : undefined, // ถ้าจะ clone
-                },
-            },
-            nodeOrderByPageId: {
-                ...prev.nodeOrderByPageId,
-                [newPageId]: [],
-            },
-        }));
-
-        setActivePageId(newPageId);
-    }
-
-    function deleteActivePage() {
-        if (!activePageId) return;
-        const order = doc.pageOrder ?? [];
-        if (order.length <= 1) return;
-
-        const idx = order.indexOf(activePageId);
-        if (idx < 0) return;
-
-        const nextOrder = order.filter(id => id !== activePageId);
-
-        const nextActiveId =
-            nextOrder[Math.min(idx, nextOrder.length - 1)] ?? nextOrder[0] ?? null;
-
-        setDoc(prev => {
-            const pagesById = { ...(prev.pagesById ?? {}) };
-            delete pagesById[activePageId];
-
-            const nodeOrderByPageId = { ...(prev.nodeOrderByPageId ?? {}) };
-            // ไม่จำเป็นต้องลบก็ได้ แต่ลบให้สะอาด
-            delete nodeOrderByPageId[activePageId];
-
-            // NOTE: ยังไม่ลบ nodes ของหน้านี้ (เพราะอาจมีระบบ recycle/undo)
-            // ถ้าต้องการลบจริงค่อยทำ sanitize ทีหลัง
-
-            return {
-                ...prev,
-                pageOrder: nextOrder,
-                pagesById,
-                nodeOrderByPageId,
-            };
-        });
-
-        setActivePageId(nextActiveId);
-    }
-
-    // ====== UI ======
-
-
     return (
         <div ref={rootRef} style={{ height: "100vh", overflow: "hidden", position: "relative" }}>
             <div style={{ position: "absolute", inset: 0, background: "#e5e7eb" }}>
@@ -302,7 +183,7 @@ export function EditorApp() {
                     <CanvasView
                         document={doc}
                         activePageId={activePageId}
-                        setActivePageId={setActivePageId}
+                        setActivePageId={setActivePage}
                         mode="scroll"
                         zoom={zoom}
                         scrollRootRef={centerRef}
@@ -335,7 +216,7 @@ export function EditorApp() {
                     doc={doc}
                     pages={pages}
                     activePageId={activePageId}
-                    setActivePageId={(id) => setActivePageId(id)}
+                    setActivePageId={setActivePage}
                     addPageToEnd={addPageToEnd}
                     deleteActivePage={deleteActivePage}
                     leftW={leftW}
@@ -377,7 +258,7 @@ export function EditorApp() {
                 }}
             >
                 <div style={{ flex: 1, overflow: "auto" }}>
-                    <Inspector doc={doc} activePageId={activePageId} setDoc={setDoc} />
+                    <Inspector doc={doc} activePageId={activePageId} />
                 </div>
             </div>
 

@@ -2,7 +2,8 @@
 
 import React, { useMemo } from "react";
 import type { DocumentJson, Id, PagePreset } from "../editor-core/schema";
-import { getOrientation, normalizePresetOrientation } from "../editor-core/schema";
+import { getOrientation } from "../editor-core/schema";
+import { useEditorStore } from "./store/editorStore";
 
 function clampInt(n: number, min: number, max: number) {
     const x = Number.isFinite(n) ? n : min;
@@ -36,21 +37,48 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export function Inspector({
     doc,
     activePageId,
-    setDoc,
+
 }: {
     doc: DocumentJson;
     activePageId: Id | null;
-    setDoc: React.Dispatch<React.SetStateAction<DocumentJson>>;
+
 }) {
+    const {
+        setPagePreset: setPagePresetAction,
+        updatePresetSize: updatePresetSizeAction,
+        updatePresetMargin: updatePresetMarginAction,
+        setPresetOrientation: setPresetOrientationAction,
+    } = useEditorStore();
+
     const page = activePageId ? doc.pagesById[activePageId] : null;
     const preset = page ? doc.pagePresetsById[page.presetId] : null;
+
+    const setPagePreset = (nextPresetId: Id) => {
+        if (!page) return;
+        setPagePresetAction(page.id, nextPresetId);
+    };
+
+    const updatePresetSize = (patch: Partial<PagePreset["size"]>) => {
+        if (!preset) return;
+        updatePresetSizeAction(preset.id, patch);
+    };
+
+    const setPresetOrientation = (mode: "portrait" | "landscape") => {
+        if (!preset) return;
+        setPresetOrientationAction(preset.id, mode);
+    };
+
+    const updatePresetMargin = (patch: Partial<PagePreset["margin"]>) => {
+        if (!preset) return;
+        updatePresetMarginAction(preset.id, patch);
+    };
 
 
 
     const presetOptions = useMemo(() => {
         return doc.pagePresetOrder
             .map((id) => doc.pagePresetsById[id])
-            .filter(Boolean);
+            .filter((p): p is PagePreset => Boolean(p));
     }, [doc.pagePresetOrder, doc.pagePresetsById]);
 
     const effectiveMargin = useMemo(() => {
@@ -60,60 +88,6 @@ export function Inspector({
         return ov ? { ...base, ...ov } : base;
     }, [preset, page?.override?.margin]);
 
-    const setPagePreset = (nextPresetId: Id) => {
-        if (!page) return;
-        setDoc((prev) => ({
-            ...prev,
-            pagesById: {
-                ...prev.pagesById,
-                [page.id]: {
-                    ...prev.pagesById[page.id],
-                    presetId: nextPresetId,
-                },
-            },
-        }));
-    };
-
-    const updatePresetSize = (patch: Partial<PagePreset["size"]>) => {
-        if (!preset) return;
-        setDoc((prev) => ({
-            ...prev,
-            pagePresetsById: {
-                ...prev.pagePresetsById,
-                [preset.id]: {
-                    ...prev.pagePresetsById[preset.id],
-                    size: { ...prev.pagePresetsById[preset.id].size, ...patch },
-                    source: prev.pagePresetsById[preset.id].source ?? "custom",
-                },
-            },
-        }));
-    };
-
-    const setPresetOrientation = (mode: "portrait" | "landscape") => {
-        if (!preset) return;
-        setDoc((prev) => ({
-            ...prev,
-            pagePresetsById: {
-                ...prev.pagePresetsById,
-                [preset.id]: normalizePresetOrientation(prev.pagePresetsById[preset.id], mode),
-            },
-        }));
-    };
-
-    const updatePresetMargin = (patch: Partial<PagePreset["margin"]>) => {
-        if (!preset) return;
-        setDoc((prev) => ({
-            ...prev,
-            pagePresetsById: {
-                ...prev.pagePresetsById,
-                [preset.id]: {
-                    ...prev.pagePresetsById[preset.id],
-                    margin: { ...prev.pagePresetsById[preset.id].margin, ...patch },
-                    source: prev.pagePresetsById[preset.id].source ?? "custom",
-                },
-            },
-        }));
-    };
 
     if (!page || !preset) {
         return (
@@ -174,7 +148,7 @@ export function Inspector({
                 <FieldRow label="Preset">
                     <select
                         value={page.presetId}
-                        onChange={(e) => setPagePreset(e.target.value)}
+                        onChange={(e) => setPagePreset(e.target.value as Id)}
                         style={{ width: "100%", padding: "6px 8px", borderRadius: 10, border: "1px solid #e5e7eb" }}
                     >
                         {presetOptions.map((p) => (
