@@ -6,7 +6,7 @@ import { CanvasView } from "./CanvasView";
 import { Inspector } from "./Inspector";
 import type { PageJson } from "../editor-core/schema";
 import { PagesPanel } from "./PagesPanel";
-
+import type { CanvasNavigatorHandle } from "./CanvasView";
 
 
 function clamp(n: number, min: number, max: number) {
@@ -69,7 +69,7 @@ export function EditorApp() {
         setActivePage, setZoom,
         addPageToEnd, insertPageAfter, deleteActivePage,
     } = useEditorStore();
-
+    const canvasNavRef = useRef<CanvasNavigatorHandle | null>(null);
     const centerRef = useRef<HTMLDivElement | null>(null);
     const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -181,6 +181,7 @@ export function EditorApp() {
             <div style={{ position: "absolute", inset: 0, background: "#e5e7eb" }}>
                 <div ref={centerRef} style={{ height: "100%", overflow: "auto", padding: 16 }}>
                     <CanvasView
+                        ref={canvasNavRef}
                         document={doc}
                         activePageId={activePageId}
                         setActivePageId={setActivePage}
@@ -221,6 +222,9 @@ export function EditorApp() {
                     deleteActivePage={deleteActivePage}
                     leftW={leftW}
                     viewingPageId={viewingPageId}
+                    onNavigate={(pageId) => {
+                        canvasNavRef.current?.navigateToPage(pageId, { source: "pagesPanel", behavior: "auto" });
+                    }}
                 />
             </div>
 

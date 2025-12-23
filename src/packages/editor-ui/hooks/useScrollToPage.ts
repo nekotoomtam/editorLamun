@@ -2,6 +2,8 @@
 
 import { useCallback, useRef } from "react";
 
+type ScrollBehavior = "auto" | "smooth";
+
 export function useScrollToPage({
     rootEl,
     pageRefs,
@@ -11,7 +13,7 @@ export function useScrollToPage({
     pageRefs: React.RefObject<Record<string, HTMLDivElement | null>>;
     isProgrammaticScrollRef: React.RefObject<boolean>;
 }) {
-    const pendingScrollToRef = useRef<string | null>(null);
+    const pendingScrollToRef = useRef<{ pageId: string; behavior: ScrollBehavior } | null>(null);
     const unlockRafRef = useRef<number | null>(null);
     const lastManualSelectAtRef = useRef(0);
 
@@ -20,7 +22,7 @@ export function useScrollToPage({
     };
 
     const scrollAndLockToEl = useCallback(
-        (el: HTMLElement) => {
+        (el: HTMLElement, behavior: ScrollBehavior = "auto") => {
             if (!rootEl) return;
 
             isProgrammaticScrollRef.current = true;
@@ -29,7 +31,7 @@ export function useScrollToPage({
             const targetRect = el.getBoundingClientRect();
             const targetTop = rootEl.scrollTop + (targetRect.top - rootRect.top);
 
-            rootEl.scrollTo({ top: targetTop, behavior: "smooth" });
+            rootEl.scrollTo({ top: targetTop, behavior });
 
             const tolerance = 6;
             const startedAt = performance.now();
@@ -59,16 +61,16 @@ export function useScrollToPage({
     );
 
     const scrollToPage = useCallback(
-        (pageId: string) => {
+        (pageId: string, behavior: ScrollBehavior = "auto") => {
             if (!rootEl) return;
 
             const el = pageRefs.current[pageId];
             if (!el) {
-                pendingScrollToRef.current = pageId;
+                pendingScrollToRef.current = { pageId, behavior };
                 return;
             }
 
-            scrollAndLockToEl(el);
+            scrollAndLockToEl(el, behavior);
         },
         [rootEl, pageRefs, scrollAndLockToEl]
     );
@@ -76,14 +78,12 @@ export function useScrollToPage({
     const registerPageRef = useCallback(
         (pageId: string, el: HTMLDivElement | null) => {
             pageRefs.current[pageId] = el;
-
-            // เคลียร์กรณีโดนถอด
             if (!el) return;
 
-            // ถ้ามี pending ที่รอ ref โผล่ -> scroll ไปเลย
-            if (pendingScrollToRef.current === pageId) {
+            const pending = pendingScrollToRef.current;
+            if (pending?.pageId === pageId) {
                 pendingScrollToRef.current = null;
-                scrollToPage(pageId);
+                scrollToPage(pageId, pending.behavior);
             }
         },
         [pageRefs, scrollToPage]

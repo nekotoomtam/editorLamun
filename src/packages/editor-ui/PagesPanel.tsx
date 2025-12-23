@@ -16,6 +16,7 @@ export function PagesPanel({
     addPageToEnd,
     deleteActivePage,
     leftW,
+    onNavigate
 }: {
     doc: DocumentJson;
     pages: PageJson[];
@@ -25,6 +26,7 @@ export function PagesPanel({
     addPageToEnd: () => void;
     deleteActivePage: () => void;
     leftW: number;
+    onNavigate?: (id: string) => void;
 }) {
     const [mode, setMode] = useState<Mode>("list");
     const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -112,7 +114,10 @@ export function PagesPanel({
                                 ref={(el) => {
                                     itemRefs.current[p.id] = el;
                                 }}
-                                onClick={() => setActivePageId(p.id)}
+                                onClick={() => {
+                                    setActivePageId(p.id);       // ยังต้อง set state ใน store (ให้ inspector เปลี่ยน)
+                                    onNavigate?.(p.id);          // ✅ สั่ง canvas scroll (ตัวนี้แหละที่ทำให้ “กดซ้ายแล้วไปหน้า”)
+                                }}
                                 style={{
                                     padding: "8px 10px",
 
@@ -147,7 +152,10 @@ export function PagesPanel({
                                     ref={(el) => {
                                         itemRefs.current[p.id] = el;
                                     }}
-                                    onClick={() => setActivePageId(p.id)}
+                                    onClick={() => {
+                                        setActivePageId(p.id);       // ยังต้อง set state ใน store (ให้ inspector เปลี่ยน)
+                                        onNavigate?.(p.id);          // ✅ สั่ง canvas scroll (ตัวนี้แหละที่ทำให้ “กดซ้ายแล้วไปหน้า”)
+                                    }}
                                     style={{
                                         cursor: "pointer",
                                         background: active ? "#f3f4f6" : viewing ? "rgba(59,130,246,0.08)" : "#fff",
