@@ -144,17 +144,21 @@ export function usePageNavigator({
     useEffect(() => {
         const t = forcedTargetRef.current;
         if (t === null) return;
+
         if (viewportAnchorIndex === t) {
             forcedTargetRef.current = null;
             setForcedAnchorIndex(null);
+
+            // ✅ clear programmatic lock
+            isProgrammaticScrollRef.current = false;
 
             if (forcedFallbackTimerRef.current) {
                 window.clearTimeout(forcedFallbackTimerRef.current);
                 forcedFallbackTimerRef.current = null;
             }
-
         }
-    }, [viewportAnchorIndex]);
+    }, [viewportAnchorIndex, isProgrammaticScrollRef]);
+
 
     // -------- 3) Preload around viewing --------
     useEffect(() => {
@@ -172,17 +176,7 @@ export function usePageNavigator({
     }, [mode, viewingPageId, onViewingPageIdChange]);
 
     // -------- 5) (Optional) intent scroll: only when active changed by user intent --------
-    useEffect(() => {
-        if (mode !== "scroll") return;
-        if (!activePageId) return;
-        if (!rootEl) return;
-        if (forcedAnchorIndex !== null) return;
 
-        const dt = Date.now() - (lastManualSelectAtRef.current ?? 0);
-        if (dt > 400) return;
-
-        scrollToPage(activePageId, "auto");
-    }, [mode, activePageId, rootEl, forcedAnchorIndex, scrollToPage, lastManualSelectAtRef]);
 
     // -------- Cleanup timers --------
     useEffect(() => {
@@ -202,20 +196,46 @@ export function usePageNavigator({
             forcedTargetRef.current = null;
             setForcedAnchorIndex(null);
 
+            // ✅ clear programmatic lock ด้วย กันค้าง
+            isProgrammaticScrollRef.current = false;
 
             if (forcedFallbackTimerRef.current) {
                 window.clearTimeout(forcedFallbackTimerRef.current);
                 forcedFallbackTimerRef.current = null;
             }
         }
-    }, [pages.length]);
+    }, [pages.length, isProgrammaticScrollRef]);
+
+
+    useEffect(() => {
+        if (mode !== "scroll" || !rootEl) {
+            forcedTargetRef.current = null;
+            setForcedAnchorIndex(null);
+            isProgrammaticScrollRef.current = false;
+            if (forcedFallbackTimerRef.current) {
+                window.clearTimeout(forcedFallbackTimerRef.current);
+                forcedFallbackTimerRef.current = null;
+            }
+
+        }
+    }, [mode, rootEl, isProgrammaticScrollRef]);
 
 
     // -------- Public API: navigateToPage --------
+    const anchorIndexRef = useRef(0);
+    useEffect(() => { anchorIndexRef.current = anchorIndex; }, [anchorIndex]);
+
     const navigateToPage = useCallback(
         (pageId: string, opts?: { source?: NavigateSource; behavior?: Behavior; smoothDistancePages?: number }) => {
             if (mode !== "scroll") {
                 setActivePageId?.(pageId);
+                return;
+            }
+
+            if (!rootEl) {  // ✅ อันนี้เช็คตอนเริ่มยังพอคุ้ม
+                forcedTargetRef.current = null;
+                setForcedAnchorIndex(null);
+                isProgrammaticScrollRef.current = false;
                 return;
             }
 
@@ -229,24 +249,27 @@ export function usePageNavigator({
             if (source !== "system") markManualSelect();
             setActivePageId?.(pageId);
 
+            const curAnchor = anchorIndexRef.current;
+            if (targetIdx === curAnchor) return;
+
             forcedTargetRef.current = targetIdx;
             setForcedAnchorIndex(targetIdx);
 
-            // ✅ เลือก behavior ก่อน
             let scrollBehavior: "auto" | "smooth" = "auto";
             if (behavior === "jump") scrollBehavior = "auto";
             if (behavior === "smooth") scrollBehavior = "smooth";
             if (behavior === "auto") {
-                const curIdx = pageIdToIndex.get(activePageId ?? "") ?? anchorIndex;
+                const curIdx = pageIdToIndex.get(activePageId ?? "") ?? curAnchor;
                 const dist = Math.abs(targetIdx - curIdx);
                 scrollBehavior = dist > smoothDist ? "auto" : "smooth";
             }
 
-            // ✅ cancel old fallback (แค่เคลียร์ timer)
             if (forcedFallbackTimerRef.current) {
                 window.clearTimeout(forcedFallbackTimerRef.current);
                 forcedFallbackTimerRef.current = null;
             }
+
+            isProgrammaticScrollRef.current = true;
 
             requestAnimationFrame(() => {
                 scrollToPage(pageId, scrollBehavior);
@@ -254,7 +277,7 @@ export function usePageNavigator({
                 forcedFallbackTimerRef.current = window.setTimeout(() => {
                     forcedTargetRef.current = null;
                     setForcedAnchorIndex(null);
-
+                    isProgrammaticScrollRef.current = false;
                     forcedFallbackTimerRef.current = null;
                 }, 1200);
             });

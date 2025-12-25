@@ -30,11 +30,10 @@ export function useActivePageFromScroll({
         const pickBest = () => {
             rafPick.current = null;
 
-            // ✅ กันช่วงเพิ่งคลิก (manual select)
-            if (performance.now() - lastManualSelectAtRef.current < 300) return;
-
-            // ✅ กัน programmatic scroll
             if (isProgrammaticScrollRef.current) return;
+
+            const dt = performance.now() - lastManualSelectAtRef.current;
+            if (dt < 400) return;
 
             const entries = Object.values(seen.current).filter((e) => e.isIntersecting);
             if (!entries.length) return;
@@ -56,9 +55,11 @@ export function useActivePageFromScroll({
             const pageId = (best.target as HTMLElement).dataset.pageId;
             if (!pageId || pageId === activePageId) return;
 
+            if (isProgrammaticScrollRef.current) return;
+
             activeFromScrollRef.current = true;
             onChange(pageId);
-
+            queueMicrotask(() => (activeFromScrollRef.current = false));
         };
 
         const obs = new IntersectionObserver(

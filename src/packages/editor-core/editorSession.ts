@@ -1,4 +1,4 @@
-import type { Id } from "../editor-core/schema";
+import type { Id } from "./schema";
 
 export type EditorTool = "select" | "pan" | "text" | "box" | "image" | "field";
 
