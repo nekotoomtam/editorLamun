@@ -7,6 +7,7 @@ import { Inspector } from "./Inspector";
 import type { PageJson } from "../editor-core/schema";
 import { PagesPanel } from "./PagesPanel";
 import type { CanvasNavigatorHandle } from "./CanvasView";
+import { AddPresetModal } from "./AddPresetModal";
 
 
 function clamp(n: number, min: number, max: number) {
@@ -64,11 +65,8 @@ const LEFT_KEY = "editor:leftWidth";
 const RIGHT_KEY = "editor:rightWidth";
 
 export function EditorApp() {
-    const {
-        doc, session,
-        setActivePage, setZoom,
-        addPageToEnd, insertPageAfter, deleteActivePage,
-    } = useEditorStore();
+    const { doc, session, setActivePage, setZoom, addPageToEnd, insertPageAfter, deleteActivePage, createPagePreset } = useEditorStore();
+
     const canvasNavRef = useRef<CanvasNavigatorHandle | null>(null);
     const centerRef = useRef<HTMLDivElement | null>(null);
     const rootRef = useRef<HTMLDivElement | null>(null);
@@ -76,6 +74,8 @@ export function EditorApp() {
     const [leftW, setLeftW] = useState(240);
     const [rightW, setRightW] = useState(320);
     const [mounted, setMounted] = useState(false);
+    const [addPresetOpen, setAddPresetOpen] = useState(false);
+    const addPresetMode = doc.pageOrder.length === 0 ? "bootstrap" : "library";
 
     // viewingPageId จะเก็บ local ก็ได้ (หรือจะย้ายเข้า store ทีหลัง)
     const [viewingPageId, setViewingPageId] = useState<string | null>(session.activePageId);
@@ -174,6 +174,12 @@ export function EditorApp() {
         };
     }, []);
 
+    useEffect(() => {
+        if (doc.pageOrder.length === 0) {
+            setAddPresetOpen(true);
+            setActivePage(null);
+        }
+    }, [doc.pageOrder.length]);
     // ====== Page actions (schema ใหม่: pageOrder/pagesById) ======
 
     return (
@@ -262,7 +268,14 @@ export function EditorApp() {
                 }}
             >
                 <div style={{ flex: 1, overflow: "auto" }}>
-                    <Inspector doc={doc} activePageId={activePageId} />
+                    <Inspector
+                        doc={doc}
+                        activePageId={activePageId}
+                        onOpenAddPreset={() => {
+                            if (doc.pageOrder.length === 0) return; // bootstrap กำลังบังคับอยู่
+                            setAddPresetOpen(true);
+                        }}
+                    />
                 </div>
             </div>
 
@@ -281,6 +294,19 @@ export function EditorApp() {
                     width: 6,
                     cursor: "col-resize",
                     zIndex: 70,
+                }}
+            />
+            <AddPresetModal
+                open={addPresetOpen}
+                doc={doc}
+                mode={addPresetMode}
+                onClose={() => {
+                    // bootstrap ปิดไม่ได้อยู่แล้วใน modal component
+                    setAddPresetOpen(false);
+                }}
+                onConfirm={(draft) => {
+                    createPagePreset(draft, { bootstrap: doc.pageOrder.length === 0 });
+                    setAddPresetOpen(false);
                 }}
             />
         </div>

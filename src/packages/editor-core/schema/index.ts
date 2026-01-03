@@ -1,12 +1,23 @@
 export type Id = string;
-export type Unit = "px" | "pui";
+export type Unit = "px";
 
+export const DOC_VERSION_LATEST = 1 as const;
+export type DocVersion = number;
 
+export type RepeatArea = {
+    id: Id;
+    name?: string;
+    heightPx: number;        // ใช้จริง
+    minHeightPx?: number;    // clamp
+    maxHeightPx?: number;    // clamp
+    nodesById: Record<Id, NodeJson>;
+    nodeOrder: Id[];
+};
 
 export type DocumentJson = {
     id: Id;
     name: string;
-    version: 1;
+    version: DocVersion;
 
     meta?: {
         createdAt?: string;
@@ -40,6 +51,13 @@ export type DocumentJson = {
         order: Id[];
         byId: Record<Id, GuideJson>;
     };
+    layout?: {               // ไม่บังคับใช้ตอนนี้ แต่ปักหมุดไว้
+        headerSlotId?: Id | null;
+        footerSlotId?: Id | null;
+
+        headersById?: Record<Id, RepeatArea>;
+        footersById?: Record<Id, RepeatArea>;
+    };
 };
 
 export type PagePreset = {
@@ -59,13 +77,18 @@ export type PageJson = {
     locked?: boolean;
     visible?: boolean;
 
-    override?: {
-        margin?: Partial<PagePreset["margin"]>;
-    };
+    marginOverride?: Partial<PagePreset["margin"]> | null;
+    headerHidden?: boolean;
+    footerHidden?: boolean;
 };
+export type NodeOwner =
+    | { kind: "page"; pageId: Id }
+    | { kind: "header"; headerId: Id }
+    | { kind: "footer"; footerId: Id };
 
 export type NodeBase = {
     id: Id;
+    owner: NodeOwner;
     pageId: Id;
 
     type: "text" | "box" | "image" | "group" | "field";

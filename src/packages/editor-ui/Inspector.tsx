@@ -37,10 +37,12 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export function Inspector({
     doc,
     activePageId,
+    onOpenAddPreset,
 
 }: {
     doc: DocumentJson;
     activePageId: Id | null;
+    onOpenAddPreset?: () => void;
 
 }) {
     const {
@@ -84,9 +86,9 @@ export function Inspector({
     const effectiveMargin = useMemo(() => {
         if (!preset) return null;
         const base = preset.margin;
-        const ov = page?.override?.margin;
+        const ov = page?.marginOverride;
         return ov ? { ...base, ...ov } : base;
-    }, [preset, page?.override?.margin]);
+    }, [preset, page?.marginOverride]);
 
 
     if (!page || !preset) {
@@ -158,6 +160,21 @@ export function Inspector({
                         ))}
                     </select>
                 </FieldRow>
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <button
+                        onClick={() => onOpenAddPreset?.()}
+                        style={{
+                            padding: "6px 10px",
+                            borderRadius: 10,
+                            border: "1px solid #e5e7eb",
+                            background: "#fff",
+                            cursor: "pointer",
+                            fontWeight: 800,
+                        }}
+                    >
+                        + Add preset
+                    </button>
+                </div>
             </Section>
 
             <Section title="Paper">

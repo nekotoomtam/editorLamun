@@ -53,8 +53,8 @@ export function PageView({
     ]);
 
     // ✅ margin override
-    const margin = page.override?.margin
-        ? { ...preset.margin, ...page.override.margin }
+    const margin = page?.marginOverride
+        ? { ...preset.margin, ...page?.marginOverride }
         : preset.margin;
 
     return (

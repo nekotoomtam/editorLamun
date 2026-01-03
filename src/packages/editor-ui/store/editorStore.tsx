@@ -35,6 +35,10 @@ type Store = {
     updatePresetSize: (presetId: Id, patch: Partial<PagePreset["size"]>) => void;
     updatePresetMargin: (presetId: Id, patch: Partial<PagePreset["margin"]>) => void;
     setPresetOrientation: (presetId: Id, mode: "portrait" | "landscape") => void;
+    createPagePreset: (
+        draft: { name: string; orientation: "portrait" | "landscape" },
+        opts?: { bootstrap?: boolean }
+    ) => void;
 
 };
 
@@ -280,6 +284,71 @@ export function EditorStoreProvider({
                     },
                 }));
             },
+            createPagePreset: (draft, opts) => {
+                const bootstrap = !!opts?.bootstrap;
+
+                let createdPageId: Id | null = null;
+
+                setDoc((prev) => {
+                    // --- 1) สร้าง preset ---
+                    const presetId = uid("preset");
+
+                    // A4 base (ใช้ค่าที่ตัวอยากได้ / หรือเปลี่ยนทีหลังให้ sync กับระบบ)
+                    const base: PagePreset = {
+                        id: presetId,
+                        name: draft.name,
+                        size: { width: 820, height: 1160 },
+                        margin: { top: 10, right: 10, bottom: 10, left: 10 },
+                        source: "custom",
+                        locked: false,
+                    };
+
+                    const oriented = normalizePresetOrientation(base, draft.orientation);
+
+                    const next: DocumentJson = {
+                        ...prev,
+                        pagePresetOrder: prev.pagePresetOrder.includes(presetId)
+                            ? prev.pagePresetOrder
+                            : [...prev.pagePresetOrder, presetId],
+                        pagePresetsById: {
+                            ...prev.pagePresetsById,
+                            [presetId]: oriented,
+                        },
+                    };
+
+                    // --- 2) bootstrap: ถ้าไม่มีหน้า ให้สร้างหน้าแรกอัตโนมัติ ---
+                    if (bootstrap && next.pageOrder.length === 0) {
+                        createdPageId = uid("page");
+
+                        return {
+                            ...next,
+                            pageOrder: [createdPageId],
+                            pagesById: {
+                                ...next.pagesById,
+                                [createdPageId]: {
+                                    id: createdPageId,
+                                    presetId,
+                                    name: "Page 1",
+                                    visible: true,
+                                    locked: false,
+                                },
+                            },
+                            nodeOrderByPageId: {
+                                ...next.nodeOrderByPageId,
+                                [createdPageId]: [],
+                            },
+                        };
+                    }
+
+                    return next;
+                });
+
+                // --- 3) ถ้าสร้างหน้าแรกแล้ว: set active page ---
+                if (createdPageId) {
+                    setSession((s) => ({ ...s, activePageId: createdPageId }));
+                }
+            },
+
 
         };
     }, [doc, session]);
