@@ -7,6 +7,14 @@ import type { EditorSession } from "../../editor-core/editorSession";
 import * as Sel from "../../editor-core/schema/selectors";
 import * as Cmd from "../../editor-core/commands/docCommands";
 
+type PaperKey = "A4" | "A3" | "LETTER" | "LEGAL";
+
+const PAPER_SIZES: Record<PaperKey, { w: number; h: number }> = {
+    A4: { w: 820, h: 1160 },
+    A3: { w: 1160, h: 1640 },
+    LETTER: { w: 816, h: 1056 },
+    LEGAL: { w: 816, h: 1344 },
+};
 
 type Store = {
     doc: DocumentJson;
@@ -36,9 +44,15 @@ type Store = {
     updatePresetMargin: (presetId: Id, patch: Partial<PagePreset["margin"]>) => void;
     setPresetOrientation: (presetId: Id, mode: "portrait" | "landscape") => void;
     createPagePreset: (
-        draft: { name: string; orientation: "portrait" | "landscape" },
+        draft: { name: string; orientation: "portrait" | "landscape"; paperKey: PaperKey },
         opts?: { bootstrap?: boolean }
     ) => void;
+    updatePreset: (
+        presetId: Id,
+        patch: { name?: string; size?: { width: number; height: number }; orientation?: "portrait" | "landscape" }
+    ) => void;
+    deletePresetAndReassignPages: (presetId: Id, opts: { reassignMap: Record<Id, Id> }) => void
+
 
 };
 
@@ -290,19 +304,26 @@ export function EditorStoreProvider({
                 let createdPageId: Id | null = null;
 
                 setDoc((prev) => {
-                    // --- 1) สร้าง preset ---
                     const presetId = uid("preset");
 
-                    // A4 base (ใช้ค่าที่ตัวอยากได้ / หรือเปลี่ยนทีหลังให้ sync กับระบบ)
+                    const baseSize = PAPER_SIZES[draft.paperKey] ?? PAPER_SIZES.A4;
+
+                    // ทำ size ให้ตรงกับ orientation ที่เลือก
+                    const size =
+                        draft.orientation === "portrait"
+                            ? { width: baseSize.w, height: baseSize.h }
+                            : { width: baseSize.h, height: baseSize.w };
+
                     const base: PagePreset = {
                         id: presetId,
                         name: draft.name,
-                        size: { width: 820, height: 1160 },
+                        size,
                         margin: { top: 10, right: 10, bottom: 10, left: 10 },
                         source: "custom",
                         locked: false,
                     };
 
+                    // กันไว้ เผื่ออนาคต normalizePresetOrientation ทำอย่างอื่นด้วย
                     const oriented = normalizePresetOrientation(base, draft.orientation);
 
                     const next: DocumentJson = {
@@ -316,7 +337,6 @@ export function EditorStoreProvider({
                         },
                     };
 
-                    // --- 2) bootstrap: ถ้าไม่มีหน้า ให้สร้างหน้าแรกอัตโนมัติ ---
                     if (bootstrap && next.pageOrder.length === 0) {
                         createdPageId = uid("page");
 
@@ -343,11 +363,89 @@ export function EditorStoreProvider({
                     return next;
                 });
 
-                // --- 3) ถ้าสร้างหน้าแรกแล้ว: set active page ---
                 if (createdPageId) {
                     setSession((s) => ({ ...s, activePageId: createdPageId }));
                 }
             },
+
+            updatePreset: (presetId, patch) => {
+                setDoc((prev) => {
+                    const p = prev.pagePresetsById[presetId];
+                    if (!p) return prev;
+
+                    // locked กันแก้ (เหมือนที่ modal disable แต่กันอีกชั้น)
+                    if (p.locked) return prev;
+
+                    let nextP: PagePreset = { ...p };
+
+                    if (patch.name) {
+                        const nn = patch.name.trim();
+                        if (nn) nextP.name = nn;
+                    }
+
+                    if (patch.size) {
+                        nextP.size = { ...nextP.size, ...patch.size };
+                        nextP.source = nextP.source ?? "custom";
+                    }
+
+                    // orientation: normalize (สลับ width/height ให้ถูก)
+                    if (patch.orientation) {
+                        nextP = normalizePresetOrientation(nextP, patch.orientation);
+                    }
+
+                    return {
+                        ...prev,
+                        pagePresetsById: {
+                            ...prev.pagePresetsById,
+                            [presetId]: nextP,
+                        },
+                    };
+                });
+            },
+
+            deletePresetAndReassignPages: (presetId, opts) => {
+                const map = opts.reassignMap || {};
+
+                setDoc((prev) => {
+                    const pagesById = { ...prev.pagesById };
+
+                    // 1) reassign pages (immutable per page)
+                    for (const [pageId, nextPresetId] of Object.entries(map) as Array<[Id, Id]>) {
+                        const page = pagesById[pageId];
+                        if (!page) continue;
+                        if (page.presetId !== presetId) continue;
+
+                        pagesById[pageId] = { ...page, presetId: nextPresetId };
+                    }
+
+                    // 2) delete preset
+                    const pagePresetsById = { ...prev.pagePresetsById };
+                    delete pagePresetsById[presetId];
+
+                    const pagePresetOrder = prev.pagePresetOrder.filter((id) => id !== presetId);
+
+                    return {
+                        ...prev,
+                        pagesById,
+                        pagePresetsById,
+                        pagePresetOrder,
+                    };
+                });
+
+                // 3) safety: ถ้า active page ยังชี้ preset ที่ถูกลบ -> พยายามใช้ map หรือ fallback
+                setSession((s) => {
+                    const ap = s.activePageId;
+                    if (!ap) return s;
+
+                    const nextPresetId = map[ap]; // ถ้า active page อยู่ใน map จะได้ตัวนี้
+                    if (nextPresetId) return s;   // preset ของ page จะถูกเปลี่ยนแล้ว ไม่ต้องยุ่ง
+
+                    return s;
+                });
+            },
+
+
+
 
 
         };

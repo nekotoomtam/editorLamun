@@ -38,11 +38,13 @@ export function Inspector({
     doc,
     activePageId,
     onOpenAddPreset,
+    onOpenEditPreset,
 
 }: {
     doc: DocumentJson;
     activePageId: Id | null;
     onOpenAddPreset?: () => void;
+    onOpenEditPreset?: (presetId: Id) => void;
 
 }) {
     const {
@@ -175,27 +177,42 @@ export function Inspector({
                         + Add preset
                     </button>
                 </div>
+
             </Section>
 
             <Section title="Paper">
-                <FieldRow label="Size">
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                        <input
-                            type="number"
-                            disabled={isLocked}
-                            value={preset.size.width}
-                            onChange={(e) => updatePresetSize({ width: clampInt(Number(e.target.value), 100, 5000) })}
+                <FieldRow label="Preset">
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "center" }}>
+                        {/*   <select
+                            value={page.presetId}
+                            onChange={(e) => setPagePreset(e.target.value as Id)}
                             style={{ width: "100%", padding: "6px 8px", borderRadius: 10, border: "1px solid #e5e7eb" }}
-                        />
-                        <input
-                            type="number"
-                            disabled={isLocked}
-                            value={preset.size.height}
-                            onChange={(e) => updatePresetSize({ height: clampInt(Number(e.target.value), 100, 5000) })}
-                            style={{ width: "100%", padding: "6px 8px", borderRadius: 10, border: "1px solid #e5e7eb" }}
-                        />
+                        >
+                            {presetOptions.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                    {p.name} {p.source === "custom" ? "(custom)" : ""}
+                                </option>
+                            ))}
+                        </select> */}
+
+                        <button
+                            type="button"
+                            onClick={() => onOpenEditPreset?.(page.presetId)}
+                            style={{
+                                padding: "6px 10px",
+                                borderRadius: 10,
+                                border: "1px solid #e5e7eb",
+                                background: "#fff",
+                                cursor: "pointer",
+                                fontWeight: 800,
+                                whiteSpace: "nowrap",
+                            }}
+                        >
+                            ✎ Edit
+                        </button>
                     </div>
                 </FieldRow>
+
 
                 <FieldRow label="Orientation">
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -204,14 +221,14 @@ export function Inspector({
                         </div>
                         <div style={{ flex: 1 }} />
                         <button
-                            disabled={isLocked}
+                            disabled={true}
                             onClick={() => setPresetOrientation("portrait")}
                             style={btnStyle(isLocked)}
                         >
                             Portrait
                         </button>
                         <button
-                            disabled={isLocked}
+                            disabled={true}
                             onClick={() => setPresetOrientation("landscape")}
                             style={btnStyle(isLocked)}
                         >
@@ -240,7 +257,7 @@ export function Inspector({
                 <FieldRow label="Top">
                     <input
                         type="number"
-                        disabled={isLocked}
+                        disabled={true}
                         value={effectiveMargin?.top ?? preset.margin.top}
                         onChange={(e) => updatePresetMargin({ top: clampInt(Number(e.target.value), 0, 500) })}
                         style={{ width: "100%", padding: "6px 8px", borderRadius: 10, border: "1px solid #e5e7eb" }}
@@ -249,7 +266,7 @@ export function Inspector({
                 <FieldRow label="Right">
                     <input
                         type="number"
-                        disabled={isLocked}
+                        disabled={true}
                         value={effectiveMargin?.right ?? preset.margin.right}
                         onChange={(e) => updatePresetMargin({ right: clampInt(Number(e.target.value), 0, 500) })}
                         style={{ width: "100%", padding: "6px 8px", borderRadius: 10, border: "1px solid #e5e7eb" }}
@@ -258,7 +275,7 @@ export function Inspector({
                 <FieldRow label="Bottom">
                     <input
                         type="number"
-                        disabled={isLocked}
+                        disabled={true}
                         value={effectiveMargin?.bottom ?? preset.margin.bottom}
                         onChange={(e) => updatePresetMargin({ bottom: clampInt(Number(e.target.value), 0, 500) })}
                         style={{ width: "100%", padding: "6px 8px", borderRadius: 10, border: "1px solid #e5e7eb" }}
@@ -267,7 +284,7 @@ export function Inspector({
                 <FieldRow label="Left">
                     <input
                         type="number"
-                        disabled={isLocked}
+                        disabled={true}
                         value={effectiveMargin?.left ?? preset.margin.left}
                         onChange={(e) => updatePresetMargin({ left: clampInt(Number(e.target.value), 0, 500) })}
                         style={{ width: "100%", padding: "6px 8px", borderRadius: 10, border: "1px solid #e5e7eb" }}

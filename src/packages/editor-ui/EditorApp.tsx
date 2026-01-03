@@ -8,6 +8,7 @@ import type { PageJson } from "../editor-core/schema";
 import { PagesPanel } from "./PagesPanel";
 import type { CanvasNavigatorHandle } from "./CanvasView";
 import { AddPresetModal } from "./AddPresetModal";
+import type { Id } from "../editor-core/schema";
 
 
 function clamp(n: number, min: number, max: number) {
@@ -65,7 +66,19 @@ const LEFT_KEY = "editor:leftWidth";
 const RIGHT_KEY = "editor:rightWidth";
 
 export function EditorApp() {
-    const { doc, session, setActivePage, setZoom, addPageToEnd, insertPageAfter, deleteActivePage, createPagePreset } = useEditorStore();
+    const {
+        doc,
+        session,
+        setActivePage,
+        setZoom,
+        addPageToEnd,
+        insertPageAfter,
+        deleteActivePage,
+        createPagePreset,
+        updatePreset,
+        deletePresetAndReassignPages,
+    } = useEditorStore();
+
 
     const canvasNavRef = useRef<CanvasNavigatorHandle | null>(null);
     const centerRef = useRef<HTMLDivElement | null>(null);
@@ -75,6 +88,11 @@ export function EditorApp() {
     const [rightW, setRightW] = useState(320);
     const [mounted, setMounted] = useState(false);
     const [addPresetOpen, setAddPresetOpen] = useState(false);
+
+    // ✅ NEW: preset modal state
+    const [presetMode, setPresetMode] = useState<"create" | "edit" | "delete">("create");
+    const [presetId, setPresetId] = useState<Id | null>(null);
+
     const addPresetMode = doc.pageOrder.length === 0 ? "bootstrap" : "library";
 
     // viewingPageId จะเก็บ local ก็ได้ (หรือจะย้ายเข้า store ทีหลัง)
@@ -174,13 +192,48 @@ export function EditorApp() {
         };
     }, []);
 
+    const didAutoOpenPresetRef = useRef(false);
+
     useEffect(() => {
-        if (doc.pageOrder.length === 0) {
+        const empty = doc.pageOrder.length === 0;
+
+        if (empty && !didAutoOpenPresetRef.current) {
+            didAutoOpenPresetRef.current = true;
+            setPresetMode("create");
+            setPresetId(null);
             setAddPresetOpen(true);
-            setActivePage(null);
+
+            // เอาออกก่อน ลด loop:
+            // setActivePage(null);
+            return;
         }
-    }, [doc.pageOrder.length]);
-    // ====== Page actions (schema ใหม่: pageOrder/pagesById) ======
+
+        if (!empty) {
+            didAutoOpenPresetRef.current = false; // กลับมามีหน้าแล้ว reset เผื่ออนาคตลบจนเหลือ 0
+        }
+    }, [doc.pageOrder.length]); // ตัด setActivePage ออกจาก deps ไปเลย
+
+
+    // ✅ helper: open create
+    const openCreatePreset = () => {
+        setPresetMode("create");
+        setPresetId(null);
+        setAddPresetOpen(true);
+    };
+
+    // ✅ helper: open edit
+    const openEditPreset = (id: Id) => {
+        setPresetMode("edit");
+        setPresetId(id);
+        setAddPresetOpen(true);
+    };
+
+    // ✅ helper: open delete (มาจาก edit แล้วกด delete)
+    const openDeletePreset = (id: Id) => {
+        setPresetMode("delete");
+        setPresetId(id);
+        setAddPresetOpen(true);
+    };
 
     return (
         <div ref={rootRef} style={{ height: "100vh", overflow: "hidden", position: "relative" }}>
@@ -272,10 +325,14 @@ export function EditorApp() {
                         doc={doc}
                         activePageId={activePageId}
                         onOpenAddPreset={() => {
-                            if (doc.pageOrder.length === 0) return; // bootstrap กำลังบังคับอยู่
-                            setAddPresetOpen(true);
+                            if (doc.pageOrder.length === 0) return;
+                            openCreatePreset();
+                        }}
+                        onOpenEditPreset={(pid) => {
+                            openEditPreset(pid);
                         }}
                     />
+
                 </div>
             </div>
 
@@ -300,13 +357,42 @@ export function EditorApp() {
                 open={addPresetOpen}
                 doc={doc}
                 mode={addPresetMode}
+                presetMode={presetMode}
+                presetId={presetId ?? undefined}
                 onClose={() => {
-                    // bootstrap ปิดไม่ได้อยู่แล้วใน modal component
+                    // bootstrap ปิดไม่ได้อยู่แล้วใน modal
                     setAddPresetOpen(false);
                 }}
-                onConfirm={(draft) => {
-                    createPagePreset(draft, { bootstrap: doc.pageOrder.length === 0 });
+
+                // ✅ create
+                onCreate={(draft, extra) => {
+                    // ตอนนี้ store createPagePreset ยังรับแค่ {name, orientation}
+                    // ส่วน cloneFromId ถ้าจะ clone จริง เดี๋ยวค่อยทำ step ต่อ (ตอนนี้ ignore ได้)
+                    createPagePreset(
+                        { name: draft.name, orientation: draft.orientation, paperKey: draft.paperKey },
+                        { bootstrap: doc.pageOrder.length === 0 }
+                    );
                     setAddPresetOpen(false);
+                }}
+
+                onUpdate={(id, patch) => {
+                    updatePreset(id, {
+                        name: patch.name,
+                        size: patch.size,              // modal ส่งมาแล้ว
+                        orientation: patch.orientation,
+                    });
+                    setAddPresetOpen(false);
+                }}
+
+                onDelete={(id, opts) => {
+                    deletePresetAndReassignPages(id, { reassignMap: opts.reassignMap });
+                    setAddPresetOpen(false);
+                }}
+
+                onRequestDelete={(id) => {
+                    setPresetMode("delete");
+                    setPresetId(id);
+                    setAddPresetOpen(true);
                 }}
             />
         </div>
