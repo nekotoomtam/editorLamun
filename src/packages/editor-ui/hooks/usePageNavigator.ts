@@ -250,7 +250,12 @@ export function usePageNavigator({
             setActivePageId?.(pageId);
 
             const curAnchor = anchorIndexRef.current;
-            if (targetIdx === curAnchor) return;
+            if (targetIdx === curAnchor) {
+                forcedTargetRef.current = null;
+                setForcedAnchorIndex(null);
+                isProgrammaticScrollRef.current = false;
+                return;
+            }
 
             forcedTargetRef.current = targetIdx;
             setForcedAnchorIndex(targetIdx);
@@ -259,8 +264,7 @@ export function usePageNavigator({
             if (behavior === "jump") scrollBehavior = "auto";
             if (behavior === "smooth") scrollBehavior = "smooth";
             if (behavior === "auto") {
-                const curIdx = pageIdToIndex.get(activePageId ?? "") ?? curAnchor;
-                const dist = Math.abs(targetIdx - curIdx);
+                const dist = Math.abs(targetIdx - curAnchor);
                 scrollBehavior = dist > smoothDist ? "auto" : "smooth";
             }
 
@@ -281,9 +285,7 @@ export function usePageNavigator({
                     forcedFallbackTimerRef.current = null;
                 }, 1200);
             });
-        },
-        [mode, pageIdToIndex, markManualSelect, setActivePageId, scrollToPage, activePageId, anchorIndex]
-    );
+        }, [mode, pageIdToIndex, markManualSelect, setActivePageId, scrollToPage]);
 
 
     return {

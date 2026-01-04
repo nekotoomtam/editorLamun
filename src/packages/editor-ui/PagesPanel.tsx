@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useEffect, useState, useRef } from "react";
-import type { DocumentJson, PageJson } from "../editor-core/schema";
+import type { DocumentJson, PageJson, Id } from "../editor-core/schema";
 import { PageView } from "./components/PageView";
 
 type Mode = "list" | "thumb";
@@ -16,7 +16,9 @@ export function PagesPanel({
     addPageToEnd,
     deleteActivePage,
     leftW,
-    onNavigate
+    onNavigate,
+    onInsertAfter,
+    onAddToEnd,
 }: {
     doc: DocumentJson;
     pages: PageJson[];
@@ -26,7 +28,9 @@ export function PagesPanel({
     addPageToEnd: () => void;
     deleteActivePage: () => void;
     leftW: number;
-    onNavigate?: (id: string) => void;
+    onInsertAfter?: (afterPageId: Id) => Id;
+    onAddToEnd?: () => Id;
+    onNavigate?: (id: Id) => void;
 }) {
     const [mode, setMode] = useState<Mode>("list");
     const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -61,16 +65,83 @@ export function PagesPanel({
 
     const THUMB_W = Math.max(120, Math.min(200, leftW - 32)); // ปรับตาม panel
 
+
+    const userInteractingRef = useRef(false);
+    const lastUserInteractAtRef = useRef(0);
+    const followTimerRef = useRef<number | null>(null);
+    const interactTimerRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+
+        const mark = () => {
+            userInteractingRef.current = true;
+            lastUserInteractAtRef.current = Date.now();
+
+            if (interactTimerRef.current) {
+                window.clearTimeout(interactTimerRef.current);
+                interactTimerRef.current = null;
+            }
+
+            interactTimerRef.current = window.setTimeout(() => {
+                if (Date.now() - lastUserInteractAtRef.current > 400) {
+                    userInteractingRef.current = false;
+                }
+                interactTimerRef.current = null;
+            }, 450);
+        };
+
+        el.addEventListener("wheel", mark, { passive: true });
+        el.addEventListener("touchmove", mark, { passive: true });
+        el.addEventListener("pointerdown", mark, { passive: true });
+
+        return () => {
+            el.removeEventListener("wheel", mark);
+            el.removeEventListener("touchmove", mark);
+            el.removeEventListener("pointerdown", mark);
+
+            if (interactTimerRef.current) {
+                window.clearTimeout(interactTimerRef.current);
+                interactTimerRef.current = null;
+            }
+        };
+    }, []);
+
+
+
+
     useEffect(() => {
         if (!viewingPageId) return;
         const container = scrollRef.current;
         if (!container) return;
 
+        // ถ้า user กำลังเล่น panel อยู่ อย่าไปตาม
+        if (userInteractingRef.current) return;
+
         const el = itemRefs.current[viewingPageId];
         if (!el) return;
 
-        el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        // debounce กันดิ้น
+        if (followTimerRef.current) {
+            window.clearTimeout(followTimerRef.current);
+            followTimerRef.current = null;
+        }
+
+        followTimerRef.current = window.setTimeout(() => {
+            // follow แบบสุภาพ: ไม่ smooth ตลอด
+            el.scrollIntoView({ block: "nearest", behavior: "auto" });
+            followTimerRef.current = null;
+        }, 100);
+
+        return () => {
+            if (followTimerRef.current) {
+                window.clearTimeout(followTimerRef.current);
+                followTimerRef.current = null;
+            }
+        };
     }, [viewingPageId, mode]);
+
 
 
     return (
@@ -101,7 +172,7 @@ export function PagesPanel({
                 </div>
             </div>
 
-            <div ref={scrollRef} style={{ flex: 1, overflow: "auto", padding: 8 }}>
+            <div ref={scrollRef} className="scrollHover" style={{ flex: 1, overflow: "auto", padding: 8 }}>
                 {mode === "list" ? (
                     pages.map((p) => {
                         const viewing = p.id === viewingPageId;
@@ -147,60 +218,83 @@ export function PagesPanel({
                             const pageNo = getPageNumber(p.id);
 
                             return (
-                                <div
-                                    key={p.id}
-                                    ref={(el) => {
-                                        itemRefs.current[p.id] = el;
-                                    }}
-                                    onClick={() => {
-                                        setActivePageId(p.id);       // ยังต้อง set state ใน store (ให้ inspector เปลี่ยน)
-                                        onNavigate?.(p.id);          // ✅ สั่ง canvas scroll (ตัวนี้แหละที่ทำให้ “กดซ้ายแล้วไปหน้า”)
-                                    }}
-                                    style={{
-                                        cursor: "pointer",
-                                        background: active ? "#f3f4f6" : viewing ? "rgba(59,130,246,0.08)" : "#fff",
-                                        border: active ? "1px solid rgba(59,130,246,0.9)" : "1px solid #e5e7eb",
-                                        borderRadius: 10,
-                                        padding: 8,
-
-                                    }}
-                                >
-                                    <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
-                                        <span>{p.name ?? `Page ${pageNo}`}</span>
-                                        <span style={{ fontWeight: 700 }}>#{pageNo}</span>
-                                    </div>
-
+                                <React.Fragment key={p.id}>
                                     <div
+                                        key={p.id}
+                                        ref={(el) => {
+                                            itemRefs.current[p.id] = el;
+                                        }}
+                                        onClick={() => {
+                                            setActivePageId(p.id);       // ยังต้อง set state ใน store (ให้ inspector เปลี่ยน)
+                                            onNavigate?.(p.id);          // ✅ สั่ง canvas scroll (ตัวนี้แหละที่ทำให้ “กดซ้ายแล้วไปหน้า”)
+                                        }}
                                         style={{
-                                            width: THUMB_W,
-                                            height: thumbH,
-                                            margin: "0 auto",
-                                            overflow: "hidden",
+                                            cursor: "pointer",
+                                            background: active ? "#f3f4f6" : viewing ? "rgba(59,130,246,0.08)" : "#fff",
+                                            border: active ? "1px solid rgba(59,130,246,0.9)" : "1px solid #e5e7eb",
                                             borderRadius: 10,
-                                            background: "#fff",
-                                            border: "1px solid rgba(0,0,0,0.08)",
+                                            padding: 8,
+
                                         }}
                                     >
+                                        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
+                                            <span>{p.name ?? `Page ${pageNo}`}</span>
+                                            <span style={{ fontWeight: 700 }}>#{pageNo}</span>
+                                        </div>
+
                                         <div
                                             style={{
-                                                width: pw,
-                                                height: ph,
-                                                transform: `scale(${scale})`,
-                                                transformOrigin: "top left",
+                                                width: THUMB_W,
+                                                height: thumbH,
+                                                margin: "0 auto",
+                                                overflow: "hidden",
+                                                borderRadius: 10,
+                                                background: "#fff",
+                                                border: "1px solid rgba(0,0,0,0.08)",
                                             }}
                                         >
-                                            <PageView
-                                                document={doc}
-                                                page={p}
-                                                showMargin={false}
-                                                active={false}
-                                                renderNodes={false} // ✅ thumbnail ไม่ต้อง render node
-                                            />
+                                            <div
+                                                style={{
+                                                    width: pw,
+                                                    height: ph,
+                                                    transform: `scale(${scale})`,
+                                                    transformOrigin: "top left",
+                                                }}
+                                            >
+                                                <PageView
+                                                    document={doc}
+                                                    page={p}
+                                                    showMargin={false}
+                                                    active={false}
+                                                    renderNodes={false} // ✅ thumbnail ไม่ต้อง render node
+                                                />
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
+                                    <div
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            const newId = onInsertAfter?.(p.id);
+                                            if (newId) onNavigate?.(newId); // หรือให้ parent navigate ให้เองก็ได้
+                                        }}
+                                        style={{
+                                            height: 26,
+                                            border: "1px dashed #cbd5e1",
+                                            borderRadius: 10,
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            cursor: "pointer",
+                                            color: "#64748b",
+                                        }}
+                                        title="Add page"
+                                    >
+                                        + Add page
+                                    </div>
+                                </React.Fragment>
                             );
                         })}
+
                     </div>
                 )}
             </div>

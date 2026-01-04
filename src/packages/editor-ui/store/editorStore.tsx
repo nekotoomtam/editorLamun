@@ -35,8 +35,8 @@ type Store = {
     addNode: (pageId: Id, node: NodeJson) => void;
 
     // page actions
-    addPageToEnd: () => void;
-    insertPageAfter: (afterPageId: Id) => void;
+    addPageToEnd: () => Id;
+    insertPageAfter: (afterPageId: Id) => Id;
     deleteActivePage: () => void;
 
     setPagePreset: (pageId: Id, presetId: Id) => void;
@@ -134,7 +134,7 @@ export function EditorStoreProvider({
 
             // page actions
             addPageToEnd: () => {
-                let newPageId: Id | null = null;
+                const newPageId = uid("page");
 
                 setDoc((prev) => {
                     const lastPageId = prev.pageOrder[prev.pageOrder.length - 1];
@@ -147,7 +147,6 @@ export function EditorStoreProvider({
 
                     if (!presetId) return prev;
 
-                    newPageId = uid("page");
                     const nextPageOrder = [...prev.pageOrder, newPageId];
 
                     return {
@@ -170,22 +169,19 @@ export function EditorStoreProvider({
                     };
                 });
 
-                if (newPageId) {
-                    setSession((s) => ({ ...s, activePageId: newPageId }));
-                }
+                setSession((s) => ({ ...s, activePageId: newPageId }));
+                return newPageId;
             },
 
-            insertPageAfter: (afterPageId: Id) => {
-                let newPageId: Id | null = null;
 
-                setDoc((prev) => {
+            insertPageAfter: (afterPageId: Id) => {
+                const newPageId = uid("page");
+                setDoc(prev => {
                     const after = prev.pagesById[afterPageId];
                     if (!after) return prev;
-
                     const idx = prev.pageOrder.indexOf(afterPageId);
                     if (idx < 0) return prev;
 
-                    newPageId = uid("page");
                     const nextPageOrder = [
                         ...prev.pageOrder.slice(0, idx + 1),
                         newPageId,
@@ -197,25 +193,16 @@ export function EditorStoreProvider({
                         pageOrder: nextPageOrder,
                         pagesById: {
                             ...prev.pagesById,
-                            [newPageId]: {
-                                id: newPageId,
-                                presetId: after.presetId,
-                                name: `Page ${idx + 2}`,
-                                visible: true,
-                                locked: false,
-                            },
+                            [newPageId]: { id: newPageId, presetId: after.presetId, name: undefined, visible: true, locked: false },
                         },
-                        nodeOrderByPageId: {
-                            ...prev.nodeOrderByPageId,
-                            [newPageId]: [],
-                        },
+                        nodeOrderByPageId: { ...prev.nodeOrderByPageId, [newPageId]: [] },
                     };
                 });
 
-                if (newPageId) {
-                    setSession((s) => ({ ...s, activePageId: newPageId }));
-                }
+                setSession(s => ({ ...s, activePageId: newPageId }));
+                return newPageId;
             },
+
 
             deleteActivePage: () => {
                 const targetId = session.activePageId;

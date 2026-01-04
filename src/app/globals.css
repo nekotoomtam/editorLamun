@@ -35,6 +35,50 @@ a {
   text-decoration: none;
 }
 
+/* Firefox */
+.scrollHover {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, .55) transparent;
+}
+
+/* Chrome/Edge/Safari */
+.scrollThin::-webkit-scrollbar {
+  width: 10px;
+}
+
+.scrollThin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollThin::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, .35);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  /* ทำให้ดู “ลอยๆ” และบางลง */
+  background-clip: padding-box;
+}
+
+.scrollThin::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, .55);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.scrollHover::-webkit-scrollbar {
+  width: 12px;
+}
+
+.scrollHover::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+.scrollHover:hover::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, .45);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
 @media (prefers-color-scheme: dark) {
   html {
     color-scheme: dark;

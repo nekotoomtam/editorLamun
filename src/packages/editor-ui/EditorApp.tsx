@@ -58,9 +58,9 @@ function ZoomBar({
     );
 }
 
-const MIN_LEFT = 200;
+const MIN_LEFT = 260;
 const MAX_LEFT = 420;
-const MIN_RIGHT = 260;
+const MIN_RIGHT = 270;
 const MAX_RIGHT = 420;
 const LEFT_KEY = "editor:leftWidth";
 const RIGHT_KEY = "editor:rightWidth";
@@ -100,10 +100,6 @@ export function EditorApp() {
 
     const activePageId = session.activePageId;
     const zoom = session.zoom;
-
-    useEffect(() => {
-        setViewingPageId(session.activePageId);
-    }, [session.activePageId]);
 
     useEffect(() => {
         const el = centerRef.current;
@@ -283,6 +279,16 @@ export function EditorApp() {
                     viewingPageId={viewingPageId}
                     onNavigate={(pageId) => {
                         canvasNavRef.current?.navigateToPage(pageId, { source: "pagesPanel", behavior: "auto" });
+                    }}
+                    onInsertAfter={(afterId) => {
+                        const newId = insertPageAfter(afterId);
+                        canvasNavRef.current?.navigateToPage(newId, { source: "system", behavior: "auto" });
+                        return newId;
+                    }}
+                    onAddToEnd={() => {
+                        const newId = addPageToEnd();
+                        canvasNavRef.current?.navigateToPage(newId, { source: "system", behavior: "auto" });
+                        return newId;
                     }}
                 />
             </div>
