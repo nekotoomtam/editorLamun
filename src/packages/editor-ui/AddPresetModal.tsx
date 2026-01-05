@@ -55,6 +55,8 @@ export function AddPresetModal({
     onUpdate,
     onDelete,
     onRequestDelete,
+    initialCloneFromId,
+
 }: {
     open: boolean;
     doc: DocumentJson;
@@ -77,6 +79,7 @@ export function AddPresetModal({
 
 
     onRequestDelete?: (presetId: Id) => void;
+    initialCloneFromId?: string;
 }) {
     const isBootstrap = mode === "bootstrap";
 
@@ -126,13 +129,14 @@ export function AddPresetModal({
         setNameTouched(false);
 
         if (presetMode === "create") {
-            setCloneFromId(CLONE_A4);
+            setCloneFromId(initialCloneFromId ?? CLONE_A4);
             setOri("portrait");
             setPaperKey("A4");
             setName(isBootstrap ? "A4 Portrait" : `Preset ${doc.pagePresetOrder.length + 1}`);
             setReassignToPresetId(null);
             return;
         }
+
 
         if ((presetMode === "edit" || presetMode === "delete") && targetPreset) {
             const baseOri: "portrait" | "landscape" =

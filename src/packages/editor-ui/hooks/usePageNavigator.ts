@@ -85,6 +85,16 @@ export function usePageNavigator({
     );
 
     const viewingPageId = pages[anchorIndex]?.id ?? null;
+    const lastReportedViewingRef = useRef<string | null>(null);
+
+    const reportViewing = useCallback(
+        (id: string | null) => {
+            if (lastReportedViewingRef.current === id) return;
+            lastReportedViewingRef.current = id;
+            onViewingPageIdChange?.(id);
+        },
+        [onViewingPageIdChange]
+    );
 
     // -------- 1) Viewport scroll -> viewportAnchorIndex (stateful + hysteresis) --------
     useEffect(() => {
@@ -156,8 +166,9 @@ export function usePageNavigator({
                 window.clearTimeout(forcedFallbackTimerRef.current);
                 forcedFallbackTimerRef.current = null;
             }
+            reportViewing(pages[t]?.id ?? null);
         }
-    }, [viewportAnchorIndex, isProgrammaticScrollRef]);
+    }, [viewportAnchorIndex, isProgrammaticScrollRef, pages, reportViewing]);
 
 
     // -------- 3) Preload around viewing --------
@@ -172,8 +183,13 @@ export function usePageNavigator({
     // -------- 4) Notify viewing page id --------
     useEffect(() => {
         if (mode !== "scroll") return;
-        onViewingPageIdChange?.(viewingPageId);
-    }, [mode, viewingPageId, onViewingPageIdChange]);
+
+        // ✅ ระหว่าง programmatic scroll: ไม่ต้องรายงานระหว่างทาง (กัน left panel follow เด้ง)
+        if (isProgrammaticScrollRef.current) return;
+
+        reportViewing(viewingPageId);
+    }, [mode, viewingPageId, reportViewing, isProgrammaticScrollRef]);
+
 
     // -------- 5) (Optional) intent scroll: only when active changed by user intent --------
 
@@ -254,6 +270,8 @@ export function usePageNavigator({
                 forcedTargetRef.current = null;
                 setForcedAnchorIndex(null);
                 isProgrammaticScrollRef.current = false;
+                reportViewing(pageId);
+
                 return;
             }
 
@@ -283,9 +301,14 @@ export function usePageNavigator({
                     setForcedAnchorIndex(null);
                     isProgrammaticScrollRef.current = false;
                     forcedFallbackTimerRef.current = null;
+
+                    // ✅ รายงานครั้งเดียวหลังหมดเวลา (กันค้าง/ไม่ปล่อย forced)
+                    reportViewing(pageId);
                 }, 1200);
+
             });
-        }, [mode, pageIdToIndex, markManualSelect, setActivePageId, scrollToPage]);
+        }, [mode, pageIdToIndex, markManualSelect, setActivePageId, scrollToPage, pages, reportViewing]);
+
 
 
     return {

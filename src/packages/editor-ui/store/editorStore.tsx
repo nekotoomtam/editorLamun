@@ -46,7 +46,7 @@ type Store = {
     createPagePreset: (
         draft: { name: string; orientation: "portrait" | "landscape"; paperKey: PaperKey },
         opts?: { bootstrap?: boolean }
-    ) => void;
+    ) => Id | null;
     updatePreset: (
         presetId: Id,
         patch: { name?: string; size?: { width: number; height: number }; orientation?: "portrait" | "landscape" }
@@ -295,7 +295,6 @@ export function EditorStoreProvider({
 
                     const baseSize = PAPER_SIZES[draft.paperKey] ?? PAPER_SIZES.A4;
 
-                    // ทำ size ให้ตรงกับ orientation ที่เลือก
                     const size =
                         draft.orientation === "portrait"
                             ? { width: baseSize.w, height: baseSize.h }
@@ -310,7 +309,6 @@ export function EditorStoreProvider({
                         locked: false,
                     };
 
-                    // กันไว้ เผื่ออนาคต normalizePresetOrientation ทำอย่างอื่นด้วย
                     const oriented = normalizePresetOrientation(base, draft.orientation);
 
                     const next: DocumentJson = {
@@ -353,7 +351,10 @@ export function EditorStoreProvider({
                 if (createdPageId) {
                     setSession((s) => ({ ...s, activePageId: createdPageId }));
                 }
+
+                return createdPageId;
             },
+
 
             updatePreset: (presetId, patch) => {
                 setDoc((prev) => {

@@ -100,7 +100,7 @@ export function EditorApp() {
 
     const activePageId = session.activePageId;
     const zoom = session.zoom;
-
+    const activePresetId = activePageId ? doc.pagesById[activePageId]?.presetId : null;
     useEffect(() => {
         const el = centerRef.current;
         if (!el) return;
@@ -143,6 +143,10 @@ export function EditorApp() {
         return doc.pageOrder.map((id) => doc.pagesById[id]).filter(Boolean) as PageJson[];
     }, [doc.pageOrder, doc.pagesById]);
 
+    useEffect(() => {
+        // sync viewing ให้ตาม active เวลา active เปลี่ยนจากการกด/เพิ่มหน้า
+        setViewingPageId(activePageId ?? null);
+    }, [activePageId]);
 
 
 
@@ -245,6 +249,7 @@ export function EditorApp() {
                         scrollRootRef={centerRef}
                         onAddPageAfter={insertPageAfter}
                         onViewingPageIdChange={setViewingPageId}
+
                     />
                 </div>
 
@@ -282,14 +287,31 @@ export function EditorApp() {
                     }}
                     onInsertAfter={(afterId) => {
                         const newId = insertPageAfter(afterId);
-                        canvasNavRef.current?.navigateToPage(newId, { source: "system", behavior: "auto" });
+                        setActivePage(newId);
+                        setViewingPageId(newId);
+                        requestAnimationFrame(() => {
+                            canvasNavRef.current?.navigateToPage(newId, { source: "pagesPanel", behavior: "auto" });
+                        });
                         return newId;
                     }}
+
                     onAddToEnd={() => {
                         const newId = addPageToEnd();
-                        canvasNavRef.current?.navigateToPage(newId, { source: "system", behavior: "auto" });
+
+                        // ✅ 1) ทำให้ active เป็นหน้าใหม่แน่นอน
+                        setActivePage(newId);
+
+                        // ✅ 2) ให้ left panel follow ถูกหน้า
+                        setViewingPageId(newId);
+
+                        // ✅ 3) สั่ง canvas ไปหน้าใหม่ (รอ 1 เฟรมให้ page metrics อัปเดตก่อน)
+                        requestAnimationFrame(() => {
+                            canvasNavRef.current?.navigateToPage(newId, { source: "pagesPanel", behavior: "auto" });
+                        });
+
                         return newId;
                     }}
+
                 />
             </div>
 
@@ -370,16 +392,26 @@ export function EditorApp() {
                     setAddPresetOpen(false);
                 }}
 
+
                 // ✅ create
                 onCreate={(draft, extra) => {
-                    // ตอนนี้ store createPagePreset ยังรับแค่ {name, orientation}
-                    // ส่วน cloneFromId ถ้าจะ clone จริง เดี๋ยวค่อยทำ step ต่อ (ตอนนี้ ignore ได้)
-                    createPagePreset(
+                    const createdPageId = createPagePreset(
                         { name: draft.name, orientation: draft.orientation, paperKey: draft.paperKey },
                         { bootstrap: doc.pageOrder.length === 0 }
                     );
+
                     setAddPresetOpen(false);
+
+                    // ✅ ถ้าเป็น bootstrap: store จะสร้าง page 1 ให้ แล้วเราพา canvas ไปหน้าใหม่ให้ชัวร์
+                    if (createdPageId) {
+                        setActivePage(createdPageId);
+                        setViewingPageId(createdPageId);
+                        requestAnimationFrame(() => {
+                            canvasNavRef.current?.navigateToPage(createdPageId, { source: "system", behavior: "auto" });
+                        });
+                    }
                 }}
+
 
                 onUpdate={(id, patch) => {
                     updatePreset(id, {
@@ -400,6 +432,8 @@ export function EditorApp() {
                     setPresetId(id);
                     setAddPresetOpen(true);
                 }}
+                initialCloneFromId={activePresetId ?? undefined}
+
             />
         </div>
     );

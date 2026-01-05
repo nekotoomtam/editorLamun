@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, forwardRef, useImperativeHandle } from "react";
 
-import type { DocumentJson, PageJson } from "../editor-core/schema";
+import type { DocumentJson, PageJson, Id } from "../editor-core/schema";
 
 import { GapAdd } from "./components/GapAdd";
 import { VirtualPage } from "./components/VirtualPage";
@@ -27,7 +27,7 @@ type CanvasViewProps = {
     activePageId: string | null;
     showMargin?: boolean;
     mode?: CanvasMode;
-    onAddPageAfter?: (pageId: string) => void;
+    onAddPageAfter?: (pageId: string) => Id | null;
     zoom?: number;
     setActivePageId?: (pageId: string) => void;
     scrollRootRef?: React.RefObject<HTMLElement | null>;
@@ -63,6 +63,8 @@ export const CanvasView = forwardRef<CanvasNavigatorHandle, CanvasViewProps>(
         /* ---------- shared refs ---------- */
         const pageRefs = useRef<Record<string, HTMLDivElement | null>>({});
         const rootEl = scrollRootRef?.current ?? null;
+        const pendingNavRef = useRef<Id | null>(null);
+
 
         /* ---------- helpers: pages ordered ---------- */
         const pages: PageJson[] = useMemo(() => {
@@ -137,6 +139,20 @@ export const CanvasView = forwardRef<CanvasNavigatorHandle, CanvasViewProps>(
             navigateToPage: nav.navigateToPage,
         }), [nav.navigateToPage]);
 
+        useEffect(() => {
+            const id = pendingNavRef.current;
+            if (!id) return;
+
+            if (!pages.some(p => p.id === id)) return;
+
+            pendingNavRef.current = null;
+
+            requestAnimationFrame(() => {
+                nav.navigateToPage(id, { source: "canvas", behavior: "auto", smoothDistancePages: 5 });
+            });
+        }, [pages, nav.navigateToPage]);
+
+
         const anchorIndex = nav.anchorIndex;
 
         /* ---------- render ---------- */
@@ -174,9 +190,17 @@ export const CanvasView = forwardRef<CanvasNavigatorHandle, CanvasViewProps>(
                                             width={getPageWidth(p.id)}
                                             onAdd={() => {
                                                 markManualSelect();
-                                                onAddPageAfter?.(p.id);
+                                                const newId = onAddPageAfter?.(p.id);
+                                                if (!newId) return;
+
+                                                setActivePageId?.(newId);
+
+                                                // ✅ เก็บไว้ก่อน รอ pages update แล้วค่อย navigate ใน useEffect
+                                                pendingNavRef.current = newId;
                                             }}
                                         />
+
+
                                     )}
                                 </React.Fragment>
                             );
@@ -187,9 +211,17 @@ export const CanvasView = forwardRef<CanvasNavigatorHandle, CanvasViewProps>(
                                 width={getPageWidth(pages[pages.length - 1].id)}
                                 onAdd={() => {
                                     markManualSelect();
-                                    onAddPageAfter?.(pages[pages.length - 1].id);
+                                    const lastId = pages[pages.length - 1].id;
+                                    const newId = onAddPageAfter?.(lastId);
+                                    if (!newId) return;
+
+                                    setActivePageId?.(newId);
+
+                                    // ✅ เก็บไว้ก่อน รอ pages update แล้วค่อย navigate ใน useEffect
+                                    pendingNavRef.current = newId;
                                 }}
                             />
+
                         )}
                     </div>
                 </div>

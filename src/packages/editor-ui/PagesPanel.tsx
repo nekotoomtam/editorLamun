@@ -25,7 +25,7 @@ export function PagesPanel({
     activePageId: string | null;
     viewingPageId: string | null;   // ✅ เพิ่ม
     setActivePageId: (id: string) => void;
-    addPageToEnd: () => void;
+    addPageToEnd: () => Id;
     deleteActivePage: () => void;
     leftW: number;
     onInsertAfter?: (afterPageId: Id) => Id;
@@ -35,6 +35,8 @@ export function PagesPanel({
     const [mode, setMode] = useState<Mode>("list");
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+    const [hoverId, setHoverId] = useState<string | null>(null);
+
 
     useEffect(() => {
         const m = (localStorage.getItem(MODE_KEY) as Mode) || "list";
@@ -57,6 +59,17 @@ export function PagesPanel({
         order.forEach((id, i) => m.set(id, i));
         return m;
     }, [doc.pageOrder]);
+
+    const handleAddToEnd = () => {
+        const newId = onAddToEnd ? onAddToEnd() : addPageToEnd();
+
+        // เผื่อกรณีบาง flow ยังไม่สั่ง setActive หรือ navigate
+        if (newId) {
+            setActivePageId(newId);
+            onNavigate?.(newId);
+        }
+    };
+
 
     const getPageNumber = (pageId: string) => {
         const idx = pageIndexById.get(pageId);
@@ -167,7 +180,7 @@ export function PagesPanel({
                 </div>
 
                 <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                    <button onClick={addPageToEnd}>+ Add</button>
+                    <button onClick={handleAddToEnd}>+ Add</button>
                     <button onClick={deleteActivePage} disabled={pages.length <= 1}>Delete</button>
                 </div>
             </div>
@@ -187,7 +200,7 @@ export function PagesPanel({
                                 }}
                                 onClick={() => {
                                     setActivePageId(p.id);       // ยังต้อง set state ใน store (ให้ inspector เปลี่ยน)
-                                    onNavigate?.(p.id);          // ✅ สั่ง canvas scroll (ตัวนี้แหละที่ทำให้ “กดซ้ายแล้วไปหน้า”)
+                                    onNavigate?.(p.id);        // ✅ สั่ง canvas scroll (ตัวนี้แหละที่ทำให้ “กดซ้ายแล้วไปหน้า”)
                                 }}
                                 style={{
                                     padding: "8px 10px",
@@ -218,15 +231,19 @@ export function PagesPanel({
                             const pageNo = getPageNumber(p.id);
 
                             return (
-                                <React.Fragment key={p.id}>
+                                <div
+                                    key={p.id}
+                                    onMouseEnter={() => setHoverId(p.id)}
+                                    onMouseLeave={() => setHoverId((cur) => (cur === p.id ? null : cur))}
+                                    style={{ display: "flex", flexDirection: "column", gap: 6 }}
+                                >
                                     <div
-                                        key={p.id}
                                         ref={(el) => {
                                             itemRefs.current[p.id] = el;
                                         }}
                                         onClick={() => {
-                                            setActivePageId(p.id);       // ยังต้อง set state ใน store (ให้ inspector เปลี่ยน)
-                                            onNavigate?.(p.id);          // ✅ สั่ง canvas scroll (ตัวนี้แหละที่ทำให้ “กดซ้ายแล้วไปหน้า”)
+                                            setActivePageId(p.id);
+                                            onNavigate?.(p.id);
                                         }}
                                         style={{
                                             cursor: "pointer",
@@ -234,10 +251,17 @@ export function PagesPanel({
                                             border: active ? "1px solid rgba(59,130,246,0.9)" : "1px solid #e5e7eb",
                                             borderRadius: 10,
                                             padding: 8,
-
                                         }}
                                     >
-                                        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
+                                        <div
+                                            style={{
+                                                fontSize: 12,
+                                                color: "#6b7280",
+                                                marginBottom: 6,
+                                                display: "flex",
+                                                justifyContent: "space-between",
+                                            }}
+                                        >
                                             <span>{p.name ?? `Page ${pageNo}`}</span>
                                             <span style={{ fontWeight: 700 }}>#{pageNo}</span>
                                         </div>
@@ -266,32 +290,35 @@ export function PagesPanel({
                                                     page={p}
                                                     showMargin={false}
                                                     active={false}
-                                                    renderNodes={false} // ✅ thumbnail ไม่ต้อง render node
+                                                    renderNodes={false}
                                                 />
                                             </div>
                                         </div>
                                     </div>
-                                    <div
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            const newId = onInsertAfter?.(p.id);
-                                            if (newId) onNavigate?.(newId); // หรือให้ parent navigate ให้เองก็ได้
-                                        }}
-                                        style={{
-                                            height: 26,
-                                            border: "1px dashed #cbd5e1",
-                                            borderRadius: 10,
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            cursor: "pointer",
-                                            color: "#64748b",
-                                        }}
-                                        title="Add page"
-                                    >
-                                        + Add page
-                                    </div>
-                                </React.Fragment>
+
+                                    {hoverId === p.id && (
+                                        <div
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                const newId = onInsertAfter?.(p.id);
+                                                if (newId) onNavigate?.(newId);
+                                            }}
+                                            style={{
+                                                height: 26,
+                                                border: "1px dashed #cbd5e1",
+                                                borderRadius: 10,
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                cursor: "pointer",
+                                                color: "#64748b",
+                                            }}
+                                            title="Add page"
+                                        >
+                                            + Add page
+                                        </div>
+                                    )}
+                                </div>
                             );
                         })}
 
