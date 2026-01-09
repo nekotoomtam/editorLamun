@@ -4,6 +4,9 @@ export type Unit = "px";
 export const DOC_VERSION_LATEST = 1 as const;
 export type DocVersion = number;
 
+export type Margin = PagePreset["margin"];
+export type MarginSource = "preset" | "page";
+
 export type RepeatArea = {
     id: Id;
     name?: string;
@@ -77,10 +80,17 @@ export type PageJson = {
     locked?: boolean;
     visible?: boolean;
 
+    // NEW: margin source
+    marginSource?: "preset" | "page"; // default = "preset"
+    pageMargin?: PagePreset["margin"]; // ใช้เมื่อ marginSource = "page"
+
+    // OLD (optional): เก็บไว้ชั่วคราวเพื่อ backward compat
     marginOverride?: Partial<PagePreset["margin"]> | null;
+
     headerHidden?: boolean;
     footerHidden?: boolean;
 };
+
 export type NodeOwner =
     | { kind: "page"; pageId: Id }
     | { kind: "header"; headerId: Id }

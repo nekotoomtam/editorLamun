@@ -50,7 +50,7 @@ export const CanvasView = forwardRef<CanvasNavigatorHandle, CanvasViewProps>(
         {
             document,
             activePageId,
-            showMargin = false,
+            showMargin = true,
             mode = "single",
             onAddPageAfter,
             zoom = 1,

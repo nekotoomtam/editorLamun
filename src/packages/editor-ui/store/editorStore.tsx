@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useMemo, useState } from "react";
-import type { DocumentJson, Id, NodeJson, PagePreset } from "../../editor-core/schema";
+import type { DocumentJson, Id, NodeJson, PageJson, PagePreset } from "../../editor-core/schema";
 import { normalizePresetOrientation } from "../../editor-core/schema";
 import type { EditorSession } from "../../editor-core/editorSession";
 import * as Sel from "../../editor-core/schema/selectors";
@@ -42,6 +42,8 @@ type Store = {
     setPagePreset: (pageId: Id, presetId: Id) => void;
     updatePresetSize: (presetId: Id, patch: Partial<PagePreset["size"]>) => void;
     updatePresetMargin: (presetId: Id, patch: Partial<PagePreset["margin"]>) => void;
+    setPageMarginSource: (pageId: Id, source: "preset" | "page") => void;
+    updatePageMargin: (pageId: Id, patch: Partial<PagePreset["margin"]>) => void;
     setPresetOrientation: (presetId: Id, mode: "portrait" | "landscape") => void;
     createPagePreset: (
         draft: { name: string; orientation: "portrait" | "landscape"; paperKey: PaperKey },
@@ -236,17 +238,19 @@ export function EditorStoreProvider({
                 setSession((s) => ({ ...s, activePageId: nextActiveId }));
             },
             setPagePreset: (pageId, presetId) => {
-                setDoc(prev => ({
-                    ...prev,
-                    pagesById: {
-                        ...prev.pagesById,
-                        [pageId]: {
-                            ...prev.pagesById[pageId],
-                            presetId,
+                setDoc(prev => {
+                    const page = prev.pagesById[pageId];
+                    if (!page) return prev;
+                    return {
+                        ...prev,
+                        pagesById: {
+                            ...prev.pagesById,
+                            [pageId]: { ...page, presetId },
                         },
-                    },
-                }));
+                    };
+                });
             },
+
 
             updatePresetSize: (presetId, patch) => {
                 setDoc(prev => ({
@@ -262,19 +266,83 @@ export function EditorStoreProvider({
                 }));
             },
 
-            updatePresetMargin: (presetId, patch) => {
-                setDoc(prev => ({
-                    ...prev,
-                    pagePresetsById: {
-                        ...prev.pagePresetsById,
-                        [presetId]: {
-                            ...prev.pagePresetsById[presetId],
-                            margin: { ...prev.pagePresetsById[presetId].margin, ...patch },
-                            source: prev.pagePresetsById[presetId].source ?? "custom",
+            setPageMarginSource: (pageId, source) => {
+                setDoc(prev => {
+                    const page = prev.pagesById[pageId];
+                    if (!page) return prev;
+
+                    const preset = prev.pagePresetsById[page.presetId];
+                    if (!preset) return prev;
+
+                    const nextPage: PageJson =
+                        source === "page"
+                            ? {
+                                ...page,
+                                marginSource: "page",
+                                pageMargin: page.pageMargin ?? { ...preset.margin },
+                            }
+                            : {
+                                ...page,
+                                marginSource: "preset",
+                            };
+
+                    return {
+                        ...prev,
+                        pagesById: {
+                            ...prev.pagesById,
+                            [pageId]: nextPage,
                         },
-                    },
-                }));
+                    };
+                });
             },
+            updatePageMargin: (pageId, patch) => {
+                setDoc(prev => {
+                    const page = prev.pagesById[pageId];
+                    if (!page) return prev;
+
+                    const base =
+                        page.pageMargin ??
+                        prev.pagePresetsById[page.presetId]?.margin ??
+                        { top: 0, right: 0, bottom: 0, left: 0 };
+
+                    const nextPage: PageJson = {
+                        ...page,
+                        marginSource: (page.marginSource ?? "page"),
+                        pageMargin: { ...base, ...patch },
+                    };
+
+                    return {
+                        ...prev,
+                        pagesById: {
+                            ...prev.pagesById,
+                            [pageId]: nextPage,
+                        },
+                    };
+                });
+            },
+
+            updatePresetMargin: (presetId, patch) => {
+                setDoc(prev => {
+                    const p = prev.pagePresetsById[presetId];
+                    if (!p) return prev;
+
+                    // ถ้าจะกัน locked ซ้ำก็ใส่ได้
+                    if (p.locked) return prev;
+
+                    return {
+                        ...prev,
+                        pagePresetsById: {
+                            ...prev.pagePresetsById,
+                            [presetId]: {
+                                ...p,
+                                margin: { ...p.margin, ...patch },
+                                source: p.source ?? "custom",
+                            },
+                        },
+                    };
+                });
+            },
+
 
             setPresetOrientation: (presetId, mode) => {
                 setDoc(prev => ({
