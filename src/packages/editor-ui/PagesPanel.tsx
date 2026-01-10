@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import type { DocumentJson, PageJson, Id } from "../editor-core/schema";
 import { PageView } from "./components/PageView";
 
@@ -14,7 +15,8 @@ export function PagesPanel({
     viewingPageId,          // ✅ เพิ่ม
     setActivePageId,
     addPageToEnd,
-    deleteActivePage,
+
+    deletePage,
     leftW,
     onNavigate,
     onInsertAfter,
@@ -26,7 +28,8 @@ export function PagesPanel({
     viewingPageId: string | null;   // ✅ เพิ่ม
     setActivePageId: (id: string) => void;
     addPageToEnd: () => Id;
-    deleteActivePage: () => void;
+
+    deletePage?: (pageId: Id) => void;
     leftW: number;
     onInsertAfter?: (afterPageId: Id) => Id;
     onAddToEnd?: () => Id;
@@ -36,6 +39,19 @@ export function PagesPanel({
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const [hoverId, setHoverId] = useState<string | null>(null);
+
+    const [confirm, setConfirm] = useState<{ pageId: Id; x: number; y: number } | null>(null);
+
+
+    useEffect(() => {
+        if (!confirm) return;
+
+        const onDown = () => setConfirm(null);
+
+        window.addEventListener("pointerdown", onDown);
+        return () => window.removeEventListener("pointerdown", onDown);
+    }, [confirm]);
+
 
 
     useEffect(() => {
@@ -180,8 +196,8 @@ export function PagesPanel({
                 </div>
 
                 <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                    <button onClick={handleAddToEnd}>+ Add</button>
-                    <button onClick={deleteActivePage} disabled={pages.length <= 1}>Delete</button>
+                    {/*   <button onClick={handleAddToEnd}>+ Add</button>
+                    <button onClick={deleteActivePage} disabled={pages.length <= 1}>Delete</button> */}
                 </div>
             </div>
 
@@ -218,7 +234,7 @@ export function PagesPanel({
                     })
                 ) : (
                     <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
-                        {pages.map((p) => {
+                        {pages.map((p, i) => {
                             const preset = presetById[p.presetId];
                             const pw = preset?.size?.width ?? 820;
                             const ph = preset?.size?.height ?? 1100;
@@ -229,7 +245,8 @@ export function PagesPanel({
                             const viewing = p.id === viewingPageId;
                             const active = p.id === activePageId;
                             const pageNo = getPageNumber(p.id);
-
+                            const isLast = i === pages.length - 1;
+                            const showAdd = isLast || hoverId === p.id;
                             return (
                                 <div
                                     key={p.id}
@@ -246,6 +263,7 @@ export function PagesPanel({
                                             onNavigate?.(p.id);
                                         }}
                                         style={{
+                                            position: "relative",
                                             cursor: "pointer",
                                             background: active ? "#f3f4f6" : viewing ? "rgba(59,130,246,0.08)" : "#fff",
                                             border: active ? "1px solid rgba(59,130,246,0.9)" : "1px solid #e5e7eb",
@@ -253,6 +271,100 @@ export function PagesPanel({
                                             padding: 8,
                                         }}
                                     >
+                                        {/* 🗑️ delete icon */}
+                                        <button
+                                            onPointerDown={(e) => e.stopPropagation()}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (pages.length <= 1) return;
+
+                                                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+
+                                                setConfirm((cur) =>
+                                                    cur?.pageId === p.id
+                                                        ? null
+                                                        : {
+                                                            pageId: p.id,
+                                                            x: r.right, // ✅ ระยะ “ต้องเลื่อนเมาส์ไปขวานิดนึง”
+                                                            y: r.top - 10,
+                                                        }
+                                                );
+                                            }}
+                                            disabled={pages.length <= 1}
+                                            title={pages.length <= 1 ? "ต้องมีอย่างน้อย 1 หน้า" : "ลบหน้านี้"}
+                                            style={{
+                                                position: "absolute",
+                                                top: 8,
+                                                right: 8,
+                                                width: 26,
+                                                height: 26,
+                                                borderRadius: 8,
+                                                border: "1px solid #e5e7eb",
+                                                background: "#fff",
+                                                cursor: pages.length <= 1 ? "not-allowed" : "pointer",
+                                                opacity: pages.length <= 1 ? 0.4 : 1,
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                zIndex: 3,
+                                            }}
+                                        >
+                                            🗑️
+                                        </button>
+
+
+                                        {/* ✅ anchored confirm (no cancel button; click-outside closes) */}
+                                        {confirm?.pageId === p.id &&
+                                            typeof document !== "undefined" &&
+                                            createPortal(
+                                                <div
+                                                    onPointerDown={(e) => e.stopPropagation()}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    style={{
+                                                        position: "fixed",
+                                                        left: confirm.x,
+                                                        top: confirm.y,
+                                                        zIndex: 9999,
+                                                        background: "#fff",
+                                                        border: "1px solid #e5e7eb",
+                                                        borderRadius: 10,
+                                                        padding: "10px 12px",
+                                                        boxShadow: "0 10px 20px rgba(0,0,0,0.08)",
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        gap: 10,
+                                                    }}
+                                                >
+                                                    <span style={{ fontSize: 12, color: "#111827", whiteSpace: "nowrap" }}>
+                                                        ลบหน้านี้?
+                                                    </span>
+
+                                                    <button
+                                                        onPointerDown={(e) => e.stopPropagation()}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setConfirm(null);
+                                                            deletePage?.(p.id);
+                                                        }}
+                                                        style={{
+                                                            height: 26,
+                                                            padding: "0 10px",
+                                                            borderRadius: 8,
+                                                            border: "1px solid #fecaca",
+                                                            background: "#fee2e2",
+                                                            cursor: "pointer",
+                                                            fontSize: 12,
+                                                            fontWeight: 600,
+                                                        }}
+                                                    >
+                                                        ลบ
+                                                    </button>
+                                                </div>,
+                                                document.body
+                                            )}
+
+
+                                        {/* header */}
                                         <div
                                             style={{
                                                 fontSize: 12,
@@ -260,12 +372,14 @@ export function PagesPanel({
                                                 marginBottom: 6,
                                                 display: "flex",
                                                 justifyContent: "space-between",
+                                                paddingRight: 28, // กันชนกับปุ่มถังขยะ
                                             }}
                                         >
                                             <span>{p.name ?? `Page ${pageNo}`}</span>
                                             <span style={{ fontWeight: 700 }}>#{pageNo}</span>
                                         </div>
 
+                                        {/* thumb */}
                                         <div
                                             style={{
                                                 width: THUMB_W,
@@ -296,7 +410,7 @@ export function PagesPanel({
                                         </div>
                                     </div>
 
-                                    {hoverId === p.id && (
+                                    {showAdd && (
                                         <div
                                             onClick={(e) => {
                                                 e.stopPropagation();
@@ -304,16 +418,27 @@ export function PagesPanel({
                                                 if (newId) onNavigate?.(newId);
                                             }}
                                             style={{
-                                                height: 26,
-                                                border: "1px dashed #cbd5e1",
+                                                height: 22,
+                                                border: "1px dashed #e5e7eb",
                                                 borderRadius: 10,
                                                 display: "flex",
                                                 alignItems: "center",
                                                 justifyContent: "center",
                                                 cursor: "pointer",
-                                                color: "#64748b",
+                                                color: "#94a3b8",
+                                                fontSize: 12,
+
+                                                // ✅ last always visible
+                                                opacity: showAdd ? 1 : 0,
+                                                transition: "opacity 120ms ease",
+
+                                                // ✅ กันคลิกพลาดระหว่างหน้า
+                                                pointerEvents: showAdd ? "auto" : "none",
+
+                                                // ✅ ทำให้ท้ายเอกสารดูเป็น “จุดเพิ่มต่อ”
+                                                marginTop: 6,
+                                                marginBottom: isLast ? 14 : 0,
                                             }}
-                                            title="Add page"
                                         >
                                             + Add page
                                         </div>
@@ -321,8 +446,8 @@ export function PagesPanel({
                                 </div>
                             );
                         })}
-
                     </div>
+
                 )}
             </div>
         </div>

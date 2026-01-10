@@ -73,7 +73,8 @@ export function EditorApp() {
         setZoom,
         addPageToEnd,
         insertPageAfter,
-        deleteActivePage,
+        // deleteActivePage, // เอาออกได้
+        deletePage,
         createPagePreset,
         updatePreset,
         deletePresetAndReassignPages,
@@ -279,7 +280,7 @@ export function EditorApp() {
                     activePageId={activePageId}
                     setActivePageId={setActivePage}
                     addPageToEnd={addPageToEnd}
-                    deleteActivePage={deleteActivePage}
+                    deletePage={deletePage}
                     leftW={leftW}
                     viewingPageId={viewingPageId}
                     onNavigate={(pageId) => {

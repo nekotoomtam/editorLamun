@@ -37,8 +37,8 @@ type Store = {
     // page actions
     addPageToEnd: () => Id;
     insertPageAfter: (afterPageId: Id) => Id;
-    deleteActivePage: () => void;
 
+    deletePage: (pageId: Id) => void;
     setPagePreset: (pageId: Id, presetId: Id) => void;
     updatePresetSize: (presetId: Id, patch: Partial<PagePreset["size"]>) => void;
     updatePresetMargin: (presetId: Id, patch: Partial<PagePreset["margin"]>) => void;
@@ -205,38 +205,74 @@ export function EditorStoreProvider({
                 return newPageId;
             },
 
+            deletePage: (pageId: Id) => {
+                const activeId = session.activePageId;
 
-            deleteActivePage: () => {
-                const targetId = session.activePageId;
-                if (!targetId) return;
-                if ((doc.pageOrder?.length ?? 0) <= 1) return;
-
-                // คำนวณ nextActive จาก state ปัจจุบัน (ก่อน setDoc)
+                // กันลบหน้าสุดท้าย
                 const order = doc.pageOrder ?? [];
-                const idx = order.indexOf(targetId);
+                if (order.length <= 1) return;
+                if (!pageId) return;
+
+                // ถ้า pageId ไม่มีจริง ก็ไม่ทำ
+                const idx = order.indexOf(pageId);
                 if (idx < 0) return;
 
-                const nextOrder = order.filter((id) => id !== targetId);
-                const nextActiveId =
-                    nextOrder[Math.min(idx, nextOrder.length - 1)] ?? nextOrder[0] ?? null;
+                // คำนวณ nextOrder จาก state ปัจจุบัน (ก่อน setDoc)
+                const nextOrder = order.filter((id) => id !== pageId);
+
+                // ✅ policy: ถ้าลบ "active page" -> ไปก่อนหน้าเป็นหลัก
+                // ถ้าลบหน้าอื่น -> active ไม่เปลี่ยน
+                let nextActiveId: Id | null = activeId ?? null;
+                if (activeId === pageId) {
+                    // ก่อนหน้าใน order เดิม
+                    const prevId = order[idx - 1] ?? null;
+                    // ถ้าไม่มีหน้าก่อนหน้า ค่อยไปหน้าแรกของ nextOrder
+                    nextActiveId = prevId ?? nextOrder[0] ?? null;
+                }
 
                 setDoc((prev) => {
-                    const pagesById = { ...prev.pagesById };
-                    delete pagesById[targetId];
+                    // กันกรณี state เปลี่ยนคั่นกลาง
+                    if ((prev.pageOrder?.length ?? 0) <= 1) return prev;
+                    if (!prev.pagesById[pageId]) return prev;
 
+                    // 1) pageOrder
+                    const pageOrder = prev.pageOrder.filter((id) => id !== pageId);
+
+                    // 2) pagesById
+                    const pagesById = { ...prev.pagesById };
+                    delete pagesById[pageId];
+
+                    // 3) nodeOrderByPageId + เก็บ nodeIds ของหน้านี้
+                    const nodeIdsToDelete = prev.nodeOrderByPageId[pageId] ?? [];
                     const nodeOrderByPageId = { ...prev.nodeOrderByPageId };
-                    delete nodeOrderByPageId[targetId];
+                    delete nodeOrderByPageId[pageId];
+
+                    // 4) nodesById (ลบ node ของหน้าที่ถูกลบ กัน orphan)
+                    let nodesById = prev.nodesById;
+                    if (nodeIdsToDelete.length > 0) {
+                        nodesById = { ...prev.nodesById };
+                        for (const nid of nodeIdsToDelete) {
+                            delete nodesById[nid];
+                        }
+                    }
 
                     return {
                         ...prev,
-                        pageOrder: nextOrder,
+                        pageOrder,
                         pagesById,
                         nodeOrderByPageId,
+                        nodesById,
                     };
                 });
 
-                setSession((s) => ({ ...s, activePageId: nextActiveId }));
+                setSession((s) => ({
+                    ...s,
+                    activePageId: nextActiveId,
+                    selectedNodeIds: [],
+                    hoverNodeId: null,
+                }));
             },
+
             setPagePreset: (pageId, presetId) => {
                 setDoc(prev => {
                     const page = prev.pagesById[pageId];
