@@ -8,7 +8,7 @@ export type EditorSession = {
 
   selectedNodeIds: Id[]; // หรือ single ก็ได้
   hoverNodeId: Id | null;
-
+  editingTarget: "page" | "header" | "footer";
   tool: EditorTool;
 
   // เผื่ออนาคตลาก/ย่อขยาย (ยังไม่ต้องใช้ก็ได้)

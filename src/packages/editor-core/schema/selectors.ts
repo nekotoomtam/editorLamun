@@ -45,3 +45,22 @@ export function getContentRect(doc: DocumentJson, pageId: Id) {
     };
 }
 
+export function getNodesByTarget(
+    doc: DocumentJson,
+    pageId: Id,
+    target: "page" | "header" | "footer"
+): { nodesById: Record<Id, NodeJson>; nodeOrder: Id[] } {
+    if (target === "page") {
+        const order = doc.nodeOrderByPageId?.[pageId] ?? [];
+        return { nodesById: doc.nodesById ?? {}, nodeOrder: order };
+    }
+
+    const page = doc.pagesById?.[pageId];
+    if (!page) return { nodesById: {}, nodeOrder: [] };
+
+    const hf = doc.headerFooterByPresetId?.[page.presetId];
+    if (!hf) return { nodesById: {}, nodeOrder: [] };
+
+    const zone = target === "header" ? hf.header : hf.footer;
+    return { nodesById: zone.nodesById ?? {}, nodeOrder: zone.nodeOrder ?? [] };
+}

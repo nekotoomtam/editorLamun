@@ -14,51 +14,30 @@ export function useScrollToPage({
     isProgrammaticScrollRef: React.RefObject<boolean>;
 }) {
     const pendingScrollToRef = useRef<{ pageId: string; behavior: ScrollBehavior } | null>(null);
-    const unlockRafRef = useRef<number | null>(null);
     const lastManualSelectAtRef = useRef(0);
 
     const markManualSelect = () => {
         lastManualSelectAtRef.current = performance.now();
     };
 
+    const PAGE_SCROLL_TOP_OFFSET = 16;
+
     const scrollAndLockToEl = useCallback(
         (el: HTMLElement, behavior: ScrollBehavior = "auto") => {
             if (!rootEl) return;
 
-            isProgrammaticScrollRef.current = true;
 
             const rootRect = rootEl.getBoundingClientRect();
             const targetRect = el.getBoundingClientRect();
             const targetTop = rootEl.scrollTop + (targetRect.top - rootRect.top);
 
-            rootEl.scrollTo({ top: targetTop, behavior });
+            const nextTop = Math.max(0, targetTop - PAGE_SCROLL_TOP_OFFSET);
 
-            const tolerance = 6;
-            const startedAt = performance.now();
-            const maxMs = 1200;
-
-            const tick = () => {
-                if (!rootEl || !el.isConnected) {
-                    isProgrammaticScrollRef.current = false;
-                    return;
-                }
-
-                const arrived = Math.abs(rootEl.scrollTop - targetTop) <= tolerance;
-                const timeout = performance.now() - startedAt > maxMs;
-
-                if (arrived || timeout) {
-                    isProgrammaticScrollRef.current = false;
-                    return;
-                }
-
-                unlockRafRef.current = requestAnimationFrame(tick);
-            };
-
-            if (unlockRafRef.current) cancelAnimationFrame(unlockRafRef.current);
-            unlockRafRef.current = requestAnimationFrame(tick);
+            rootEl.scrollTo({ top: nextTop, behavior });
         },
-        [rootEl, isProgrammaticScrollRef]
+        [rootEl]
     );
+
 
     const scrollToPage = useCallback(
         (pageId: string, behavior: ScrollBehavior = "auto") => {

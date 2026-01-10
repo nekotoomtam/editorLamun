@@ -54,7 +54,11 @@ type Store = {
         patch: { name?: string; size?: { width: number; height: number }; orientation?: "portrait" | "landscape" }
     ) => void;
     deletePresetAndReassignPages: (presetId: Id, opts: { reassignMap: Record<Id, Id> }) => void
-
+    setEditingTarget: (t: "page" | "header" | "footer") => void;
+    getNodesByTarget: (
+        pageId: Id,
+        target: "page" | "header" | "footer"
+    ) => { nodesById: Record<Id, NodeJson>; nodeOrder: Id[] };
 
 };
 
@@ -97,10 +101,12 @@ export function EditorStoreProvider({
         zoom: 1,
         selectedNodeIds: [],
         hoverNodeId: null,
+        editingTarget: "page",
         tool: "select",
         drag: null,
         resize: null,
     });
+
 
     const store = useMemo<Store>(() => {
         return {
@@ -206,72 +212,63 @@ export function EditorStoreProvider({
             },
 
             deletePage: (pageId: Id) => {
-                const activeId = session.activePageId;
-
-                // กันลบหน้าสุดท้าย
-                const order = doc.pageOrder ?? [];
-                if (order.length <= 1) return;
                 if (!pageId) return;
 
-                // ถ้า pageId ไม่มีจริง ก็ไม่ทำ
-                const idx = order.indexOf(pageId);
-                if (idx < 0) return;
-
-                // คำนวณ nextOrder จาก state ปัจจุบัน (ก่อน setDoc)
-                const nextOrder = order.filter((id) => id !== pageId);
-
-                // ✅ policy: ถ้าลบ "active page" -> ไปก่อนหน้าเป็นหลัก
-                // ถ้าลบหน้าอื่น -> active ไม่เปลี่ยน
-                let nextActiveId: Id | null = activeId ?? null;
-                if (activeId === pageId) {
-                    // ก่อนหน้าใน order เดิม
-                    const prevId = order[idx - 1] ?? null;
-                    // ถ้าไม่มีหน้าก่อนหน้า ค่อยไปหน้าแรกของ nextOrder
-                    nextActiveId = prevId ?? nextOrder[0] ?? null;
-                }
+                let didDelete = false;
+                let deletedNodeIds: Id[] = [];
+                let nextOrder: Id[] = [];
 
                 setDoc((prev) => {
-                    // กันกรณี state เปลี่ยนคั่นกลาง
-                    if ((prev.pageOrder?.length ?? 0) <= 1) return prev;
+                    const order = prev.pageOrder ?? [];
+                    if (order.length <= 1) return prev;
+
+                    const idx = order.indexOf(pageId);
+                    if (idx < 0) return prev;
                     if (!prev.pagesById[pageId]) return prev;
 
-                    // 1) pageOrder
-                    const pageOrder = prev.pageOrder.filter((id) => id !== pageId);
+                    nextOrder = order.filter((id) => id !== pageId);
 
-                    // 2) pagesById
                     const pagesById = { ...prev.pagesById };
                     delete pagesById[pageId];
 
-                    // 3) nodeOrderByPageId + เก็บ nodeIds ของหน้านี้
-                    const nodeIdsToDelete = prev.nodeOrderByPageId[pageId] ?? [];
+                    deletedNodeIds = prev.nodeOrderByPageId[pageId] ?? [];
+
                     const nodeOrderByPageId = { ...prev.nodeOrderByPageId };
                     delete nodeOrderByPageId[pageId];
 
-                    // 4) nodesById (ลบ node ของหน้าที่ถูกลบ กัน orphan)
                     let nodesById = prev.nodesById;
-                    if (nodeIdsToDelete.length > 0) {
+                    if (deletedNodeIds.length) {
                         nodesById = { ...prev.nodesById };
-                        for (const nid of nodeIdsToDelete) {
-                            delete nodesById[nid];
-                        }
+                        for (const nid of deletedNodeIds) delete nodesById[nid];
                     }
 
-                    return {
-                        ...prev,
-                        pageOrder,
-                        pagesById,
-                        nodeOrderByPageId,
-                        nodesById,
-                    };
+                    didDelete = true;
+
+                    return { ...prev, pageOrder: nextOrder, pagesById, nodeOrderByPageId, nodesById };
                 });
 
-                setSession((s) => ({
-                    ...s,
-                    activePageId: nextActiveId,
-                    selectedNodeIds: [],
-                    hoverNodeId: null,
-                }));
+                if (!didDelete) return;
+
+                setSession((s) => {
+                    const isDeletingActive = s.activePageId === pageId;
+
+                    // ลบ active: ไปก่อนหน้าเป็นหลัก
+                    let nextActiveId = s.activePageId;
+                    if (isDeletingActive) {
+                        const idx = (doc.pageOrder ?? []).indexOf(pageId); // ถ้าจะชัวร์สุด เก็บ order ไว้ใน setDoc เหมือน nextOrder
+                        const prevId = (doc.pageOrder ?? [])[idx - 1] ?? null;
+                        nextActiveId = prevId ?? nextOrder[0] ?? null;
+
+                        return { ...s, activePageId: nextActiveId, selectedNodeIds: [], hoverNodeId: null };
+                    }
+
+                    // ลบ non-active: filter selection เฉพาะ node ที่หายไป
+                    const filtered = s.selectedNodeIds.filter((id) => !deletedNodeIds.includes(id));
+                    const hover = s.hoverNodeId && deletedNodeIds.includes(s.hoverNodeId) ? null : s.hoverNodeId;
+                    return { ...s, selectedNodeIds: filtered, hoverNodeId: hover };
+                });
             },
+
 
             setPagePreset: (pageId, presetId) => {
                 setDoc(prev => {
@@ -537,8 +534,15 @@ export function EditorStoreProvider({
             },
 
 
+            setEditingTarget: (t) =>
+                setSession((s) => ({
+                    ...s,
+                    editingTarget: t,
+                    selectedNodeIds: [],
+                    hoverNodeId: null,
+                })),
 
-
+            getNodesByTarget: (pageId, target) => Sel.getNodesByTarget(doc, pageId, target),
 
         };
     }, [doc, session]);
@@ -546,8 +550,26 @@ export function EditorStoreProvider({
     return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }
 
+function ensureHeaderFooter(doc: DocumentJson, presetId: Id) {
+    const hfBy = doc.headerFooterByPresetId ?? {};
+    if (hfBy[presetId]) return doc;
+
+    return {
+        ...doc,
+        headerFooterByPresetId: {
+            ...hfBy,
+            [presetId]: {
+                presetId,
+                header: { height: 80, nodesById: {}, nodeOrder: [] },
+                footer: { height: 80, nodesById: {}, nodeOrder: [] },
+            },
+        },
+    };
+}
+
 export function useEditorStore() {
     const v = useContext(Ctx);
     if (!v) throw new Error("useEditorStore must be used within EditorStoreProvider");
     return v;
 }
+

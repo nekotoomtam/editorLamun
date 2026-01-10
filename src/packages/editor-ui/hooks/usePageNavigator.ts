@@ -222,6 +222,29 @@ export function usePageNavigator({
         }
     }, [pages.length, isProgrammaticScrollRef]);
 
+    // -------- 2.5) Release programmatic lock early when we actually arrive --------
+    useEffect(() => {
+        if (mode !== "scroll") return;
+
+        const t = forcedTargetRef.current;
+        if (t == null) return;
+
+        if (viewportAnchorIndex !== t) return;
+
+        // Arrived at target: release immediately (no waiting for timeout)
+        forcedTargetRef.current = null;
+        setForcedAnchorIndex(null);
+        isProgrammaticScrollRef.current = false;
+
+        if (forcedFallbackTimerRef.current) {
+            window.clearTimeout(forcedFallbackTimerRef.current);
+            forcedFallbackTimerRef.current = null;
+        }
+
+        reportViewing(pages[t]?.id ?? null);
+    }, [mode, viewportAnchorIndex, pages, reportViewing, isProgrammaticScrollRef]);
+
+
 
     useEffect(() => {
         if (mode !== "scroll" || !rootEl) {

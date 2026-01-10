@@ -16,6 +16,16 @@ export type RepeatArea = {
     nodesById: Record<Id, NodeJson>;
     nodeOrder: Id[];
 };
+type HeaderFooterZone = {
+    heightPx: number;
+    nodesById: Record<Id, NodeJson>;
+    nodeOrder: Id[];
+};
+type HeaderFooterJson = {
+    presetId: Id;
+    header: HeaderFooterZone;
+    footer: HeaderFooterZone;
+};
 
 export type DocumentJson = {
     id: Id;
@@ -34,7 +44,10 @@ export type DocumentJson = {
     // ✅ presets
     pagePresetOrder: Id[];
     pagePresetsById: Record<Id, PagePreset>;
-
+    headerFooterByPresetId?: Record<Id, {
+        header: RepeatArea;
+        footer: RepeatArea;
+    }>;
     // ✅ pages
     pageOrder: Id[];
     pagesById: Record<Id, PageJson>;
@@ -93,8 +106,8 @@ export type PageJson = {
 
 export type NodeOwner =
     | { kind: "page"; pageId: Id }
-    | { kind: "header"; headerId: Id }
-    | { kind: "footer"; footerId: Id };
+    | { kind: "header"; presetId: Id }
+    | { kind: "footer"; presetId: Id };
 
 export type NodeBase = {
     id: Id;
