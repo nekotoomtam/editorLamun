@@ -12,18 +12,55 @@ export function addNode(doc: DocumentJson, pageId: Id, node: NodeJson) {
     const order = doc.nodeOrderByPageId[pageId] ?? [];
     doc.nodeOrderByPageId[pageId] = [...order, node.id];
 }
+export function addNodeToTarget(
+    doc: DocumentJson,
+    pageId: Id,
+    target: "page" | "header" | "footer",
+    node: NodeJson
+) {
+    if (target === "page") return addNode(doc, pageId, node);
+
+    const page = doc.pagesById?.[pageId];
+    if (!page) return;
+
+    const hf = ensureHeaderFooter(doc, page.presetId);
+    const zone = target === "header" ? hf.header : hf.footer;
+
+    zone.nodesById[node.id] = node;
+    zone.nodeOrder = [...(zone.nodeOrder ?? []), node.id];
+}
+
 
 export function updateNode(doc: DocumentJson, nodeId: Id, patch: Partial<NodeJson>) {
-    const prev = doc.nodesById[nodeId];
-    if (!prev) return;
-
-    // กัน type เปลี่ยนมั่ว ๆ (แนะนำ)
-    if ("type" in patch && (patch as any).type !== prev.type) {
-        throw new Error("updateNode: cannot change node.type");
+    // 1) ลองหาใน page nodes ก่อน
+    const prev = doc.nodesById?.[nodeId];
+    if (prev) {
+        if ("type" in patch && (patch as any).type !== prev.type) {
+            throw new Error("updateNode: cannot change node.type");
+        }
+        doc.nodesById[nodeId] = { ...(prev as any), ...(patch as any) };
+        return;
     }
 
-    doc.nodesById[nodeId] = { ...(prev as any), ...(patch as any) };
+    // 2) หาใน header/footer zones
+    const hfMap = doc.headerFooterByPresetId;
+    if (!hfMap) return;
+
+    for (const presetId of Object.keys(hfMap)) {
+        const hf = hfMap[presetId];
+        for (const z of [hf.header, hf.footer]) {
+            const p = z.nodesById?.[nodeId];
+            if (!p) continue;
+
+            if ("type" in patch && (patch as any).type !== p.type) {
+                throw new Error("updateNode: cannot change node.type");
+            }
+            z.nodesById[nodeId] = { ...(p as any), ...(patch as any) };
+            return;
+        }
+    }
 }
+
 
 const DEFAULT_MARGIN = { top: 10, right: 10, bottom: 10, left: 10 };
 
@@ -72,3 +109,27 @@ export function ensureFirstPage(doc: DocumentJson, presetId: Id): Id | null {
 
     return pageId;
 }
+
+function ensureHeaderFooter(doc: DocumentJson, presetId: Id) {
+    if (!doc.headerFooterByPresetId) doc.headerFooterByPresetId = {};
+    if (!doc.headerFooterByPresetId[presetId]) {
+        doc.headerFooterByPresetId[presetId] = {
+            header: {
+                id: `header-${presetId}`,
+                name: "Header",
+                heightPx: 0, // ค่าเริ่มต้น 0 = ยังไม่เปิด (กันเอกสารเก่าพัง)
+                nodesById: {},
+                nodeOrder: [],
+            },
+            footer: {
+                id: `footer-${presetId}`,
+                name: "Footer",
+                heightPx: 0,
+                nodesById: {},
+                nodeOrder: [],
+            },
+        };
+    }
+    return doc.headerFooterByPresetId[presetId];
+}
+

@@ -70,6 +70,9 @@ export function Inspector({
         // ✅ NEW
         setPageMarginSource,
         updatePageMargin,
+        setPresetHeaderHeightPx,
+        setPresetFooterHeightPx,
+        setPageHeaderFooterHidden,
     } = useEditorStore();
 
     const page = activePageId ? doc.pagesById[activePageId] : null;
@@ -281,6 +284,116 @@ export function Inspector({
                 <FieldRow label="Source">
                     <div style={{ color: "#6b7280", fontWeight: 700 }}>{preset.source ?? "custom"}</div>
                 </FieldRow>
+            </Section>
+            <Section title="Header / Footer">
+                {(() => {
+                    const hf = doc.headerFooterByPresetId?.[preset.id];
+                    const headerPx = hf?.header?.heightPx ?? 0;
+                    const footerPx = hf?.footer?.heightPx ?? 0;
+
+                    const headerEnabled = headerPx > 0;
+                    const footerEnabled = footerPx > 0;
+
+                    const setHeaderEnabled = (on: boolean) => {
+                        // เปิด = default 100, ปิด = 0
+                        setPresetHeaderHeightPx(preset.id, on ? (headerPx || 100) : 0);
+                        // ถ้าปิด preset ก็เคลียร์ hide ของ page ให้กลับมาเป็น false จะได้ไม่งง
+                        if (!on) setPageHeaderFooterHidden(page.id, { headerHidden: false });
+                    };
+
+                    const setFooterEnabled = (on: boolean) => {
+                        setPresetFooterHeightPx(preset.id, on ? (footerPx || 80) : 0);
+                        if (!on) setPageHeaderFooterHidden(page.id, { footerHidden: false });
+                    };
+
+                    return (
+                        <>
+                            <FieldRow label="Header">
+                                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={headerEnabled}
+                                        onChange={(e) => setHeaderEnabled(e.target.checked)}
+                                    />
+                                    <span style={{ fontSize: 12, color: "#374151" }}>Enable</span>
+                                </label>
+                            </FieldRow>
+
+                            {headerEnabled && (
+                                <>
+                                    <FieldRow label="Height">
+                                        <input
+                                            type="number"
+                                            value={headerPx}
+                                            min={0}
+                                            onChange={(e) => setPresetHeaderHeightPx(preset.id, clampInt(Number(e.target.value), 0, 600))}
+                                            style={{
+                                                width: "100%",
+                                                padding: "6px 8px",
+                                                borderRadius: 10,
+                                                border: "1px solid #e5e7eb",
+                                            }}
+                                        />
+                                    </FieldRow>
+
+                                    <FieldRow label="This page">
+                                        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={!!page.headerHidden}
+                                                onChange={(e) => setPageHeaderFooterHidden(page.id, { headerHidden: e.target.checked })}
+                                            />
+                                            <span style={{ fontSize: 12, color: "#374151" }}>Hide header</span>
+                                        </label>
+                                    </FieldRow>
+                                </>
+                            )}
+
+                            <div style={{ height: 10 }} />
+
+                            <FieldRow label="Footer">
+                                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={footerEnabled}
+                                        onChange={(e) => setFooterEnabled(e.target.checked)}
+                                    />
+                                    <span style={{ fontSize: 12, color: "#374151" }}>Enable</span>
+                                </label>
+                            </FieldRow>
+
+                            {footerEnabled && (
+                                <>
+                                    <FieldRow label="Height">
+                                        <input
+                                            type="number"
+                                            value={footerPx}
+                                            min={0}
+                                            onChange={(e) => setPresetFooterHeightPx(preset.id, clampInt(Number(e.target.value), 0, 600))}
+                                            style={{
+                                                width: "100%",
+                                                padding: "6px 8px",
+                                                borderRadius: 10,
+                                                border: "1px solid #e5e7eb",
+                                            }}
+                                        />
+                                    </FieldRow>
+
+                                    <FieldRow label="This page">
+                                        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={!!page.footerHidden}
+                                                onChange={(e) => setPageHeaderFooterHidden(page.id, { footerHidden: e.target.checked })}
+                                            />
+                                            <span style={{ fontSize: 12, color: "#374151" }}>Hide footer</span>
+                                        </label>
+                                    </FieldRow>
+                                </>
+                            )}
+                        </>
+                    );
+                })()}
             </Section>
 
             <FieldRow label="Status">

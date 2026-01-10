@@ -59,6 +59,10 @@ type Store = {
         pageId: Id,
         target: "page" | "header" | "footer"
     ) => { nodesById: Record<Id, NodeJson>; nodeOrder: Id[] };
+    setPresetHeaderHeightPx: (presetId: Id, heightPx: number) => void;
+    setPresetFooterHeightPx: (presetId: Id, heightPx: number) => void;
+    setPageHeaderFooterHidden: (pageId: Id, patch: { headerHidden?: boolean; footerHidden?: boolean }) => void;
+
 
 };
 
@@ -75,17 +79,50 @@ function cloneDocForUpdateNode(doc: DocumentJson) {
     };
 }
 
-function cloneDocForAddNode(doc: DocumentJson, pageId: Id) {
-    const prevOrder = doc.nodeOrderByPageId[pageId] ?? [];
+function cloneDocForAddNode(doc: DocumentJson, pageId: Id, target: "page" | "header" | "footer") {
+    if (target === "page") {
+        const prevOrder = doc.nodeOrderByPageId[pageId] ?? [];
+        return {
+            ...doc,
+            nodesById: { ...doc.nodesById },
+            nodeOrderByPageId: {
+                ...doc.nodeOrderByPageId,
+                [pageId]: [...prevOrder],
+            },
+        };
+    }
+
+    const page = doc.pagesById?.[pageId];
+    const presetId = page?.presetId;
+    if (!presetId) return { ...doc };
+
+    const hfMap = doc.headerFooterByPresetId ?? {};
+    const prevHF = hfMap[presetId];
+
+    const nextHF = prevHF
+        ? {
+            header: {
+                ...prevHF.header,
+                nodesById: { ...(prevHF.header.nodesById ?? {}) },
+                nodeOrder: [...(prevHF.header.nodeOrder ?? [])],
+            },
+            footer: {
+                ...prevHF.footer,
+                nodesById: { ...(prevHF.footer.nodesById ?? {}) },
+                nodeOrder: [...(prevHF.footer.nodeOrder ?? [])],
+            },
+        }
+        : undefined;
+
     return {
         ...doc,
-        nodesById: { ...doc.nodesById },
-        nodeOrderByPageId: {
-            ...doc.nodeOrderByPageId,
-            [pageId]: [...prevOrder],
+        headerFooterByPresetId: {
+            ...hfMap,
+            ...(nextHF ? { [presetId]: nextHF } : {}),
         },
     };
 }
+
 
 export function EditorStoreProvider({
     initialDoc,
@@ -94,7 +131,16 @@ export function EditorStoreProvider({
     initialDoc: DocumentJson;
     children: React.ReactNode;
 }) {
-    const [doc, setDoc] = useState<DocumentJson>(initialDoc);
+    function bootstrapAllPresetHF(d: DocumentJson) {
+        let next = d;
+        for (const presetId of next.pagePresetOrder ?? []) {
+            next = ensureHeaderFooter(next, presetId);
+        }
+        return next;
+    }
+
+    const [doc, setDoc] = useState<DocumentJson>(() => bootstrapAllPresetHF(initialDoc));
+
 
     const [session, setSession] = useState<EditorSession>({
         activePageId: initialDoc.pageOrder[0] ?? null,
@@ -106,6 +152,31 @@ export function EditorStoreProvider({
         drag: null,
         resize: null,
     });
+    function ensureHeaderFooter(doc: DocumentJson, presetId: Id) {
+        const hfBy = doc.headerFooterByPresetId ?? {};
+        if (hfBy[presetId]) return doc;
+
+        return {
+            ...doc,
+            headerFooterByPresetId: {
+                ...hfBy,
+                [presetId]: {
+                    header: {
+                        id: `hf-${presetId}-header`,
+                        heightPx: 100,          // ✅ default B
+                        nodesById: {},
+                        nodeOrder: [],
+                    },
+                    footer: {
+                        id: `hf-${presetId}-footer`,
+                        heightPx: 80,           // ✅ default B
+                        nodesById: {},
+                        nodeOrder: [],
+                    },
+                },
+            },
+        };
+    }
 
 
     const store = useMemo<Store>(() => {
@@ -134,8 +205,9 @@ export function EditorStoreProvider({
 
             addNode: (pageId, node) => {
                 setDoc((prev) => {
-                    const next = cloneDocForAddNode(prev, pageId);
-                    Cmd.addNode(next, pageId, node);
+                    const target = session.editingTarget ?? "page";
+                    const next = cloneDocForAddNode(prev, pageId, target);
+                    Cmd.addNodeToTarget(next, pageId, target, node);
                     return next;
                 });
             },
@@ -422,15 +494,16 @@ export function EditorStoreProvider({
                             [presetId]: oriented,
                         },
                     };
+                    const nextWithHF = ensureHeaderFooter(next, presetId);
 
                     if (bootstrap && next.pageOrder.length === 0) {
                         createdPageId = uid("page");
 
                         return {
-                            ...next,
+                            ...nextWithHF,
                             pageOrder: [createdPageId],
                             pagesById: {
-                                ...next.pagesById,
+                                ...nextWithHF.pagesById,
                                 [createdPageId]: {
                                     id: createdPageId,
                                     presetId,
@@ -440,13 +513,14 @@ export function EditorStoreProvider({
                                 },
                             },
                             nodeOrderByPageId: {
-                                ...next.nodeOrderByPageId,
+                                ...nextWithHF.nodeOrderByPageId,
                                 [createdPageId]: [],
                             },
                         };
                     }
 
-                    return next;
+                    return nextWithHF;
+
                 });
 
                 if (createdPageId) {
@@ -543,6 +617,67 @@ export function EditorStoreProvider({
                 })),
 
             getNodesByTarget: (pageId, target) => Sel.getNodesByTarget(doc, pageId, target),
+            setPresetHeaderHeightPx: (presetId, heightPx) => {
+                setDoc((prev) => {
+                    let next = ensureHeaderFooter(prev, presetId);
+                    const hf = next.headerFooterByPresetId?.[presetId];
+                    if (!hf) return next;
+
+                    return {
+                        ...next,
+                        headerFooterByPresetId: {
+                            ...(next.headerFooterByPresetId ?? {}),
+                            [presetId]: {
+                                ...hf,
+                                header: {
+                                    ...hf.header,
+                                    heightPx,
+                                },
+                            },
+                        },
+                    };
+                });
+            },
+
+            setPresetFooterHeightPx: (presetId, heightPx) => {
+                setDoc((prev) => {
+                    let next = ensureHeaderFooter(prev, presetId);
+                    const hf = next.headerFooterByPresetId?.[presetId];
+                    if (!hf) return next;
+
+                    return {
+                        ...next,
+                        headerFooterByPresetId: {
+                            ...(next.headerFooterByPresetId ?? {}),
+                            [presetId]: {
+                                ...hf,
+                                footer: {
+                                    ...hf.footer,
+                                    heightPx,
+                                },
+                            },
+                        },
+                    };
+                });
+            },
+
+            setPageHeaderFooterHidden: (pageId, patch) => {
+                setDoc((prev) => {
+                    const p = prev.pagesById?.[pageId];
+                    if (!p) return prev;
+
+                    return {
+                        ...prev,
+                        pagesById: {
+                            ...prev.pagesById,
+                            [pageId]: {
+                                ...p,
+                                ...patch,
+                            },
+                        },
+                    };
+                });
+            },
 
         };
     }, [doc, session]);
@@ -550,22 +685,7 @@ export function EditorStoreProvider({
     return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }
 
-function ensureHeaderFooter(doc: DocumentJson, presetId: Id) {
-    const hfBy = doc.headerFooterByPresetId ?? {};
-    if (hfBy[presetId]) return doc;
 
-    return {
-        ...doc,
-        headerFooterByPresetId: {
-            ...hfBy,
-            [presetId]: {
-                presetId,
-                header: { height: 80, nodesById: {}, nodeOrder: [] },
-                footer: { height: 80, nodesById: {}, nodeOrder: [] },
-            },
-        },
-    };
-}
 
 export function useEditorStore() {
     const v = useContext(Ctx);

@@ -39,7 +39,9 @@ export function PageView({
     const preset = document.pagePresetsById?.[page.presetId] ?? null;
     if (!preset) return <div>no preset</div>;
 
-    const { updatePresetMargin, updatePageMargin } = useEditorStore();
+    const { updatePresetMargin, updatePageMargin, session, setEditingTarget, getNodesByTarget } = useEditorStore();
+    const editingTarget = session.editingTarget ?? "page";
+
 
     const nodes = useMemo(() => {
         if (!renderNodes) return [];
@@ -54,6 +56,14 @@ export function PageView({
 
     // ===== margin base (from doc) =====
     const baseMargin = Sel.getEffectiveMargin(document, page.id) ?? preset.margin;
+    const hf = useMemo(() => Sel.getEffectiveHeaderFooterHeights(document, page.id), [document.headerFooterByPresetId, page.id, page.presetId, page.headerHidden, page.footerHidden]);
+    const headerH = hf.headerH;
+    const footerH = hf.footerH;
+
+    const pageW = preset.size.width;
+    const pageH = preset.size.height;
+    const bodyH = Math.max(0, pageH - headerH - footerH);
+
 
     // ===== preview + dragging state =====
     const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -68,11 +78,12 @@ export function PageView({
     // content rect ใช้จาก selector (แต่ตอนลากเราอยากสะท้อน preview ด้วย)
     const content = useMemo(() => {
         const x = margin.left;
-        const y = margin.top;
-        const w = Math.max(0, preset.size.width - margin.left - margin.right);
-        const h = Math.max(0, preset.size.height - margin.top - margin.bottom);
+        const y = headerH + margin.top;
+        const w = Math.max(0, pageW - margin.left - margin.right);
+        const h = Math.max(0, bodyH - margin.top - margin.bottom);
         return { x, y, w, h };
-    }, [margin.left, margin.top, margin.right, margin.bottom, preset.size.width, preset.size.height]);
+    }, [margin.left, margin.top, margin.right, margin.bottom, headerH, bodyH, pageW]);
+
 
     // ===== drag math config =====
     const HIT = 6; // ระยะจับใกล้เส้น (px ใน page space)
@@ -90,7 +101,7 @@ export function PageView({
         scale: number; // client px -> page px
         startMargin: PagePreset["margin"];
         pageW: number;
-        pageH: number;
+        bodyH: number;
     }>(null);
 
     const canDragPreset = !(preset.locked && (page.marginSource ?? "preset") === "preset");
@@ -101,12 +112,13 @@ export function PageView({
         return { dx: dxClient / s, dy: dyClient / s };
     }
 
-    function hitTestSide(px: number, py: number, m: PagePreset["margin"], pageW: number, pageH: number): Side | null {
+    function hitTestSide(px: number, py: number, m: PagePreset["margin"], pageW: number, pageH: number, headerH: number, footerH: number): Side | null {
+
         // เส้นอยู่ตรงไหน
         const xL = m.left;
         const xR = pageW - m.right;
-        const yT = m.top;
-        const yB = pageH - m.bottom;
+        const yT = headerH + m.top;
+        const yB = pageH - footerH - m.bottom;
 
         // ใกล้เส้นไหน + อยู่ในช่วงระนาบนั้น
         // (เราให้จับได้ทั้งแนวของเส้น ไม่ต้องอยู่แค่ใน content)
@@ -125,8 +137,9 @@ export function PageView({
         dy: number,
         shift: boolean,
         pageW: number,
-        pageH: number
-    ): { margin: PagePreset["margin"]; hitLimit: boolean } {
+        bodyH: number
+    )
+        : { margin: PagePreset["margin"]; hitLimit: boolean } {
         let next = { ...start };
         let hitLimit = false;
 
@@ -171,13 +184,13 @@ export function PageView({
             const delta = side === "top" ? dy : -dy;
 
             const clampTop = (v: number, bottomFixed: number) => {
-                const max = pageH - bottomFixed - MIN_CONTENT_H;
+                const max = bodyH - bottomFixed - MIN_CONTENT_H;
                 const c = clamp(v, 0, max);
                 if (c !== v) hitLimit = true;
                 return c;
             };
             const clampBottom = (v: number, topFixed: number) => {
-                const max = pageH - topFixed - MIN_CONTENT_H;
+                const max = bodyH - topFixed - MIN_CONTENT_H;
                 const c = clamp(v, 0, max);
                 if (c !== v) hitLimit = true;
                 return c;
@@ -190,7 +203,7 @@ export function PageView({
             }
 
             const wanted = delta;
-            const maxPos = (pageH - MIN_CONTENT_H - (start.top + start.bottom)) / 2;
+            const maxPos = (bodyH - MIN_CONTENT_H - (start.top + start.bottom)) / 2;
             const maxNeg = Math.max(-start.top, -start.bottom);
             const d = clamp(wanted, maxNeg, maxPos);
             if (d !== wanted) hitLimit = true;
@@ -214,7 +227,8 @@ export function PageView({
         const px = (e.clientX - rect.left) / scale;
         const py = (e.clientY - rect.top) / scale;
 
-        const side = hitTestSide(px, py, baseMargin, preset.size.width, preset.size.height);
+        const side = hitTestSide(px, py, baseMargin, pageW, pageH, headerH, footerH);
+
 
         // ถ้า preset locked และ source=preset => hover ได้แต่จะลากไม่ได้ (เพื่อให้รู้ว่ามีเส้น)
         setHoverSide(side);
@@ -249,10 +263,11 @@ export function PageView({
             startClientX: e.clientX,
             startClientY: e.clientY,
             scale,
-            startMargin: baseMargin, // เอาค่าจริงตอนเริ่มลาก
+            startMargin: baseMargin,
             pageW: preset.size.width,
-            pageH: preset.size.height,
+            bodyH,
         };
+
 
         setDragSide(hoverSide);
         setPreviewMargin(baseMargin); // init preview
@@ -274,7 +289,7 @@ export function PageView({
                 dy,
                 shift,
                 ctx.pageW,
-                ctx.pageH
+                ctx.bodyH
             );
 
             setPreviewMargin(result.margin);
@@ -335,7 +350,18 @@ export function PageView({
         };
     }
 
+    const headerNodes = useMemo(() => {
+        if (!renderNodes || headerH <= 0) return [];
+        const { nodesById, nodeOrder } = getNodesByTarget(page.id, "header");
+        return (nodeOrder ?? []).map(id => nodesById[id]).filter(Boolean).filter(n => (n as any).visible !== false);
+    }, [renderNodes, headerH, page.id, getNodesByTarget]);
 
+    const footerNodes = useMemo(() => {
+        if (!renderNodes || footerH <= 0) return [];
+        const { nodesById, nodeOrder } = getNodesByTarget(page.id, "footer");
+        return (nodeOrder ?? []).map(id => nodesById[id]).filter(Boolean).filter(n => (n as any).visible !== false);
+    }, [renderNodes, footerH, page.id, getNodesByTarget]);
+    console.log("HF", page.presetId, { headerH, footerH }, document.headerFooterByPresetId?.[page.presetId]);
     return (
         <div
             ref={(el) => {
@@ -363,6 +389,44 @@ export function PageView({
             onPointerMove={onPointerMoveLocal}
             onPointerLeave={onPointerLeave}
             onPointerDown={onPointerDown}
+            onDoubleClick={(e) => {
+                if (thumbPreview) return;
+
+                const el = wrapRef.current;
+                if (!el) return;
+                const rect = el.getBoundingClientRect();
+                const scale = rect.width / pageW;
+
+                const py = (e.clientY - rect.top) / scale;
+
+                if (headerH > 0 && py >= 0 && py <= headerH) {
+                    setEditingTarget("header");
+                    return;
+                }
+                if (footerH > 0 && py >= pageH - footerH && py <= pageH) {
+                    setEditingTarget("footer");
+                    return;
+                }
+                setEditingTarget("page");
+            }}
+            onPointerDownCapture={(e) => {
+                if (thumbPreview) return;
+                if (editingTarget === "page") return;
+
+                const el = wrapRef.current;
+                if (!el) return;
+                const rect = el.getBoundingClientRect();
+                const scale = rect.width / pageW;
+
+                const py = (e.clientY - rect.top) / scale;
+
+                const inHeader = headerH > 0 && py >= 0 && py <= headerH;
+                const inFooter = footerH > 0 && py >= pageH - footerH && py <= pageH;
+
+                if (editingTarget === "header" && !inHeader) setEditingTarget("page");
+                if (editingTarget === "footer" && !inFooter) setEditingTarget("page");
+            }}
+
         >
             {loading && (
                 <div
@@ -415,7 +479,7 @@ export function PageView({
                                 style={{
                                     position: "absolute",
                                     left: 0,
-                                    top: margin.top,
+                                    top: headerH + margin.top,
                                     width: preset.size.width,
                                     height: 1,
                                     ...lineStyle(
@@ -430,7 +494,7 @@ export function PageView({
                                 style={{
                                     position: "absolute",
                                     left: 0,
-                                    top: preset.size.height - margin.bottom,
+                                    top: preset.size.height - footerH - margin.bottom,
                                     width: preset.size.width,
                                     height: 1,
                                     ...lineStyle(highlightSide === "bottom", limitSide === "bottom"),
@@ -484,11 +548,56 @@ export function PageView({
                     )}
                 </>
             )}
+            {/* HEADER zone */}
+            {headerH > 0 && (
+                <div
+                    style={{
+                        position: "absolute",
+                        left: 0,
+                        top: 0,
+                        width: pageW,
+                        height: headerH,
+                        overflow: "hidden",
+                        pointerEvents: editingTarget === "header" ? "auto" : "none",
+                        opacity: editingTarget === "page" ? 1 : editingTarget === "header" ? 1 : 0.25,
+                        zIndex: 5
+                    }}
+                >
+                    {renderNodes && headerNodes.map((n) => (
+                        <NodeView key={n.id} node={n} document={document} />
+                    ))}
+                </div>
+            )}
 
-            {renderNodes &&
-                nodes.map((n) => (
-                    <NodeView key={n.id} node={n} document={document} />
-                ))}
+
+            <div style={{ pointerEvents: editingTarget === "page" ? "auto" : "none" }}>
+                {renderNodes &&
+                    nodes.map((n) => (
+                        <NodeView key={n.id} node={n} document={document} />
+                    ))}
+            </div>
+
+
+            {/* FOOTER zone */}
+            {footerH > 0 && (
+                <div
+                    style={{
+                        position: "absolute",
+                        left: 0,
+                        top: pageH - footerH,
+                        width: pageW,
+                        height: footerH,
+                        overflow: "hidden",
+                        pointerEvents: editingTarget === "footer" ? "auto" : "none",
+                        opacity: editingTarget === "page" ? 1 : editingTarget === "footer" ? 1 : 0.25,
+                        zIndex: 5
+                    }}
+                >
+                    {renderNodes && footerNodes.map((n) => (
+                        <NodeView key={n.id} node={n} document={document} />
+                    ))}
+                </div>
+            )}
         </div>
     );
 }

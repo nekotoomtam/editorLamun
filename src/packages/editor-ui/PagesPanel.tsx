@@ -413,6 +413,7 @@ export function PagesPanel({
                                     {showAdd && (
                                         <div
                                             onClick={(e) => {
+                                                if (!showAdd) return;
                                                 e.stopPropagation();
                                                 const newId = onInsertAfter?.(p.id);
                                                 if (newId) onNavigate?.(newId);
@@ -424,24 +425,24 @@ export function PagesPanel({
                                                 display: "flex",
                                                 alignItems: "center",
                                                 justifyContent: "center",
-                                                cursor: "pointer",
+                                                cursor: showAdd ? "pointer" : "default",
                                                 color: "#94a3b8",
                                                 fontSize: 12,
 
-                                                // ✅ last always visible
                                                 opacity: showAdd ? 1 : 0,
-                                                transition: "opacity 120ms ease",
-
-                                                // ✅ กันคลิกพลาดระหว่างหน้า
+                                                transform: showAdd ? "translateY(0)" : "translateY(-6px)",
+                                                transition: showAdd
+                                                    ? "opacity 180ms ease 60ms, transform 180ms ease 60ms"
+                                                    : "opacity 120ms ease, transform 120ms ease",
                                                 pointerEvents: showAdd ? "auto" : "none",
 
-                                                // ✅ ทำให้ท้ายเอกสารดูเป็น “จุดเพิ่มต่อ”
                                                 marginTop: 6,
                                                 marginBottom: isLast ? 14 : 0,
                                             }}
                                         >
                                             + Add page
                                         </div>
+
                                     )}
                                 </div>
                             );

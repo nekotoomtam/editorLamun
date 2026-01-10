@@ -64,3 +64,56 @@ export function getNodesByTarget(
     const zone = target === "header" ? hf.header : hf.footer;
     return { nodesById: zone.nodesById ?? {}, nodeOrder: zone.nodeOrder ?? [] };
 }
+
+export function getHeaderFooterZone(doc: DocumentJson, presetId: Id) {
+    const hf = doc.headerFooterByPresetId?.[presetId];
+    if (!hf) return null;
+    return hf;
+}
+
+export function getEffectiveHeaderFooterHeights(doc: DocumentJson, pageId: Id) {
+    const page = doc.pagesById?.[pageId];
+    if (!page) return { headerH: 0, footerH: 0 };
+
+    const hf = doc.headerFooterByPresetId?.[page.presetId];
+    if (!hf) return { headerH: 0, footerH: 0 };
+
+    const headerH = page.headerHidden ? 0 : (hf.header?.heightPx ?? 0);
+    const footerH = page.footerHidden ? 0 : (hf.footer?.heightPx ?? 0);
+
+    return { headerH, footerH };
+}
+
+
+/**
+ * content rect ของ BODY (margin เป็นของ body เท่านั้น)
+ * layout = header -> body(margin) -> footer
+ */
+export function getBodyContentRect(doc: DocumentJson, pageId: Id) {
+    const page = doc.pagesById?.[pageId];
+    if (!page) return null;
+
+    const preset = doc.pagePresetsById?.[page.presetId];
+    if (!preset) return null;
+
+    const m = getEffectiveMargin(doc, pageId);
+    if (!m) return null;
+
+    const { headerH, footerH } = getEffectiveHeaderFooterHeights(doc, pageId);
+
+    const pageW = preset.size.width;
+    const pageH = preset.size.height;
+
+    const bodyH = Math.max(0, pageH - headerH - footerH);
+
+    return {
+        x: m.left,
+        y: headerH + m.top,
+        w: Math.max(0, pageW - m.left - m.right),
+        h: Math.max(0, bodyH - m.top - m.bottom),
+        headerH,
+        footerH,
+        pageW,
+        pageH,
+    };
+}
