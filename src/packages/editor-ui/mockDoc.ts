@@ -63,6 +63,7 @@ export const mockDoc: DocumentJson = {
     nodesById: {
         "box-1": {
             id: "box-1",
+            owner: { kind: "page", pageId: "page-1" },
             pageId: "page-1",
             type: "box",
             name: "Box",
@@ -83,6 +84,7 @@ export const mockDoc: DocumentJson = {
 
         "text-1": {
             id: "text-1",
+            owner: { kind: "page", pageId: "page-1" },
             pageId: "page-1",
             type: "text",
             name: "Title",
@@ -107,6 +109,7 @@ export const mockDoc: DocumentJson = {
 
         "img-node-1": {
             id: "img-node-1",
+            owner: { kind: "page", pageId: "page-1" },
             pageId: "page-1",
             type: "image",
             name: "Image",

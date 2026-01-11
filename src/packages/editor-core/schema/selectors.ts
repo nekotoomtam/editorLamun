@@ -62,7 +62,7 @@ export function getNodesByTarget(
     if (!hf) return { nodesById: {}, nodeOrder: [] };
 
     const zone = target === "header" ? hf.header : hf.footer;
-    return { nodesById: zone.nodesById ?? {}, nodeOrder: zone.nodeOrder ?? [] };
+    return { nodesById: doc.nodesById ?? {}, nodeOrder: zone.nodeOrder ?? [] };
 }
 
 export function getHeaderFooterZone(doc: DocumentJson, presetId: Id) {

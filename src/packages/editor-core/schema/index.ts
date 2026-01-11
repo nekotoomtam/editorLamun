@@ -13,19 +13,18 @@ export type RepeatArea = {
     heightPx: number;        // ใช้จริง
     minHeightPx?: number;    // clamp
     maxHeightPx?: number;    // clamp
-    nodesById: Record<Id, NodeJson>;
+    /**
+     * Phase-1 decision:
+     * - Nodes are stored globally in DocumentJson.nodesById
+     * - Repeat areas only keep ordering (IDs)
+     *
+     * Backward-compat: older docs might still contain nodesById inside header/footer.
+     * We keep it optional for migration and will ignore it in selectors/render.
+     */
+    nodesById?: Record<Id, NodeJson>;
     nodeOrder: Id[];
 };
-type HeaderFooterZone = {
-    heightPx: number;
-    nodesById: Record<Id, NodeJson>;
-    nodeOrder: Id[];
-};
-type HeaderFooterJson = {
-    presetId: Id;
-    header: HeaderFooterZone;
-    footer: HeaderFooterZone;
-};
+
 
 export type DocumentJson = {
     id: Id;
@@ -67,12 +66,13 @@ export type DocumentJson = {
         order: Id[];
         byId: Record<Id, GuideJson>;
     };
-    layout?: {               // ไม่บังคับใช้ตอนนี้ แต่ปักหมุดไว้
+    /**
+     * @deprecated (Phase-1): legacy experiment. Header/Footer are per-preset via headerFooterByPresetId.
+     * Keep only slotIds for backward compatibility; do not add new fields here.
+     */
+    layout?: {
         headerSlotId?: Id | null;
         footerSlotId?: Id | null;
-
-        headersById?: Record<Id, RepeatArea>;
-        footersById?: Record<Id, RepeatArea>;
     };
 };
 
@@ -112,7 +112,11 @@ export type NodeOwner =
 export type NodeBase = {
     id: Id;
     owner: NodeOwner;
-    pageId: Id;
+    /**
+     * @deprecated: pageId is redundant once owner.kind === 'page'.
+     * Keep optional for backward compatibility.
+     */
+    pageId?: Id;
 
     type: "text" | "box" | "image" | "group" | "field";
     name?: string;

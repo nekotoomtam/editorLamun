@@ -62,7 +62,7 @@ type Store = {
     setPresetHeaderHeightPx: (presetId: Id, heightPx: number) => void;
     setPresetFooterHeightPx: (presetId: Id, heightPx: number) => void;
     setPageHeaderFooterHidden: (pageId: Id, patch: { headerHidden?: boolean; footerHidden?: boolean }) => void;
-
+    updateRepeatAreaHeightPx: (presetId: Id, kind: "header" | "footer", heightPx: number) => void;
 
 };
 
@@ -80,6 +80,7 @@ function cloneDocForUpdateNode(doc: DocumentJson) {
 }
 
 function cloneDocForAddNode(doc: DocumentJson, pageId: Id, target: "page" | "header" | "footer") {
+    // Phase-1: nodes are always global
     if (target === "page") {
         const prevOrder = doc.nodeOrderByPageId[pageId] ?? [];
         return {
@@ -103,12 +104,10 @@ function cloneDocForAddNode(doc: DocumentJson, pageId: Id, target: "page" | "hea
         ? {
             header: {
                 ...prevHF.header,
-                nodesById: { ...(prevHF.header.nodesById ?? {}) },
                 nodeOrder: [...(prevHF.header.nodeOrder ?? [])],
             },
             footer: {
                 ...prevHF.footer,
-                nodesById: { ...(prevHF.footer.nodesById ?? {}) },
                 nodeOrder: [...(prevHF.footer.nodeOrder ?? [])],
             },
         }
@@ -116,6 +115,7 @@ function cloneDocForAddNode(doc: DocumentJson, pageId: Id, target: "page" | "hea
 
     return {
         ...doc,
+        nodesById: { ...doc.nodesById },
         headerFooterByPresetId: {
             ...hfMap,
             ...(nextHF ? { [presetId]: nextHF } : {}),
@@ -131,8 +131,47 @@ export function EditorStoreProvider({
     initialDoc: DocumentJson;
     children: React.ReactNode;
 }) {
+    function migrateInlineHeaderFooterNodes(d: DocumentJson): DocumentJson {
+        const hfBy = d.headerFooterByPresetId;
+        if (!hfBy) return d;
+
+        let changed = false;
+        const nodesById = { ...(d.nodesById ?? {}) };
+        const nextHF: NonNullable<DocumentJson["headerFooterByPresetId"]> = { ...hfBy };
+
+        for (const presetId of Object.keys(nextHF)) {
+            const hf = nextHF[presetId];
+            if (!hf) continue;
+
+            const zones: Array<["header" | "footer", any]> = [
+                ["header", hf.header],
+                ["footer", hf.footer],
+            ];
+
+            for (const [kind, zone] of zones) {
+                const inline = zone?.nodesById;
+                if (!inline || Object.keys(inline).length === 0) continue;
+
+                changed = true;
+                for (const id of Object.keys(inline)) {
+                    const n = inline[id];
+                    if (!n) continue;
+                    // Ensure owner exists (Phase-1)
+                    const owner = (n as any).owner ?? { kind, presetId };
+                    nodesById[id] = { ...(n as any), owner };
+                }
+
+                // Remove inline storage; keep ordering only
+                zone.nodesById = undefined;
+            }
+        }
+
+        if (!changed) return d;
+        return { ...d, nodesById, headerFooterByPresetId: nextHF };
+    }
+
     function bootstrapAllPresetHF(d: DocumentJson) {
-        let next = d;
+        let next = migrateInlineHeaderFooterNodes(d);
         for (const presetId of next.pagePresetOrder ?? []) {
             next = ensureHeaderFooter(next, presetId);
         }
@@ -164,19 +203,18 @@ export function EditorStoreProvider({
                     header: {
                         id: `hf-${presetId}-header`,
                         heightPx: 100,          // ✅ default B
-                        nodesById: {},
                         nodeOrder: [],
                     },
                     footer: {
                         id: `hf-${presetId}-footer`,
                         heightPx: 80,           // ✅ default B
-                        nodesById: {},
                         nodeOrder: [],
                     },
                 },
             },
         };
     }
+
 
 
     const store = useMemo<Store>(() => {
@@ -678,6 +716,39 @@ export function EditorStoreProvider({
                     };
                 });
             },
+            updateRepeatAreaHeightPx: (presetId, kind, heightPx) => {
+                setDoc((prev) => {
+                    let next = ensureHeaderFooter(prev, presetId);
+                    const hf = next.headerFooterByPresetId?.[presetId];
+                    if (!hf) return next;
+
+                    const area = kind === "header" ? hf.header : hf.footer;
+
+                    const minH = area.minHeightPx ?? 0;
+                    const maxH = area.maxHeightPx ?? Infinity;
+
+                    const clamped = Math.max(minH, Math.min(maxH, Math.round(heightPx)));
+
+                    return {
+                        ...next,
+                        headerFooterByPresetId: {
+                            ...(next.headerFooterByPresetId ?? {}),
+                            [presetId]: {
+                                ...hf,
+                                header:
+                                    kind === "header"
+                                        ? { ...hf.header, heightPx: clamped }
+                                        : hf.header,
+                                footer:
+                                    kind === "footer"
+                                        ? { ...hf.footer, heightPx: clamped }
+                                        : hf.footer,
+                            },
+                        },
+                    };
+                });
+            },
+
 
         };
     }, [doc, session]);

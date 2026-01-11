@@ -18,21 +18,26 @@ export function addNodeToTarget(
     target: "page" | "header" | "footer",
     node: NodeJson
 ) {
-    if (target === "page") return addNode(doc, pageId, node);
+    // Phase-1: nodes are always stored globally in doc.nodesById
+    doc.nodesById[node.id] = node;
+
+    if (target === "page") {
+        const order = doc.nodeOrderByPageId[pageId] ?? [];
+        doc.nodeOrderByPageId[pageId] = [...order, node.id];
+        return;
+    }
 
     const page = doc.pagesById?.[pageId];
     if (!page) return;
 
     const hf = ensureHeaderFooter(doc, page.presetId);
     const zone = target === "header" ? hf.header : hf.footer;
-
-    zone.nodesById[node.id] = node;
     zone.nodeOrder = [...(zone.nodeOrder ?? []), node.id];
 }
 
 
 export function updateNode(doc: DocumentJson, nodeId: Id, patch: Partial<NodeJson>) {
-    // 1) ลองหาใน page nodes ก่อน
+    // Phase-1: nodes are stored globally in doc.nodesById
     const prev = doc.nodesById?.[nodeId];
     if (prev) {
         if ("type" in patch && (patch as any).type !== prev.type) {
@@ -40,24 +45,6 @@ export function updateNode(doc: DocumentJson, nodeId: Id, patch: Partial<NodeJso
         }
         doc.nodesById[nodeId] = { ...(prev as any), ...(patch as any) };
         return;
-    }
-
-    // 2) หาใน header/footer zones
-    const hfMap = doc.headerFooterByPresetId;
-    if (!hfMap) return;
-
-    for (const presetId of Object.keys(hfMap)) {
-        const hf = hfMap[presetId];
-        for (const z of [hf.header, hf.footer]) {
-            const p = z.nodesById?.[nodeId];
-            if (!p) continue;
-
-            if ("type" in patch && (patch as any).type !== p.type) {
-                throw new Error("updateNode: cannot change node.type");
-            }
-            z.nodesById[nodeId] = { ...(p as any), ...(patch as any) };
-            return;
-        }
     }
 }
 
@@ -118,14 +105,12 @@ function ensureHeaderFooter(doc: DocumentJson, presetId: Id) {
                 id: `header-${presetId}`,
                 name: "Header",
                 heightPx: 0, // ค่าเริ่มต้น 0 = ยังไม่เปิด (กันเอกสารเก่าพัง)
-                nodesById: {},
                 nodeOrder: [],
             },
             footer: {
                 id: `footer-${presetId}`,
                 name: "Footer",
                 heightPx: 0,
-                nodesById: {},
                 nodeOrder: [],
             },
         };

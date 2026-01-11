@@ -39,9 +39,31 @@ export function PageView({
     const preset = document.pagePresetsById?.[page.presetId] ?? null;
     if (!preset) return <div>no preset</div>;
 
-    const { updatePresetMargin, updatePageMargin, session, setEditingTarget, getNodesByTarget } = useEditorStore();
-    const editingTarget = session.editingTarget ?? "page";
+    const {
+        updatePresetMargin,
+        updatePageMargin,
+        session,
+        setEditingTarget,
+        getNodesByTarget,
+        setSelectedNodeIds,
+        updateRepeatAreaHeightPx,   // ✅ เพิ่ม
+    } = useEditorStore();
 
+    const editingTarget = session.editingTarget ?? "page";
+    const HF_HIT = 6;
+
+    const hfDragRef = useRef<null | {
+        presetId: string;
+        kind: "header" | "footer";
+        startClientY: number;
+        startHeaderH: number;
+        startFooterH: number;
+        scale: number;
+        pageH: number;
+    }>(null);
+
+    const [previewHeaderH, setPreviewHeaderH] = useState<number | null>(null);
+    const [previewFooterH, setPreviewFooterH] = useState<number | null>(null);
 
     const nodes = useMemo(() => {
         if (!renderNodes) return [];
@@ -57,8 +79,9 @@ export function PageView({
     // ===== margin base (from doc) =====
     const baseMargin = Sel.getEffectiveMargin(document, page.id) ?? preset.margin;
     const hf = useMemo(() => Sel.getEffectiveHeaderFooterHeights(document, page.id), [document.headerFooterByPresetId, page.id, page.presetId, page.headerHidden, page.footerHidden]);
-    const headerH = hf.headerH;
-    const footerH = hf.footerH;
+    const headerH = previewHeaderH ?? hf.headerH;
+    const footerH = previewFooterH ?? hf.footerH;
+
 
     const pageW = preset.size.width;
     const pageH = preset.size.height;
@@ -104,7 +127,7 @@ export function PageView({
         bodyH: number;
     }>(null);
 
-    const canDragPreset = !(preset.locked && (page.marginSource ?? "preset") === "preset");
+
 
     function clientToPageDelta(dxClient: number, dyClient: number, scale: number) {
         // scale = rect.width / pageW  => pageDelta = clientDelta / scale
@@ -217,7 +240,7 @@ export function PageView({
 
     // ===== pointer handlers =====
     function onPointerMoveLocal(e: React.PointerEvent) {
-        if (dragRef.current) return; // ตอนลากให้ window handler จัดการ
+        if (dragRef.current || hfDragRef.current) return;
 
         const el = wrapRef.current;
         if (!el) return;
@@ -226,6 +249,16 @@ export function PageView({
 
         const px = (e.clientX - rect.left) / scale;
         const py = (e.clientY - rect.top) / scale;
+        const nearHeaderBottom = headerH > 0 && Math.abs(py - headerH) <= HF_HIT;
+        const nearFooterTop = footerH > 0 && Math.abs(py - (pageH - footerH)) <= HF_HIT;
+
+        if (nearHeaderBottom || nearFooterTop) {
+            setHoverSide(null); // ไม่ให้ไปชนกับ drag margin
+            (wrapRef.current as any).style.cursor = "ns-resize";
+            return;
+        } else {
+            (wrapRef.current as any).style.cursor = "default";
+        }
 
         const side = hitTestSide(px, py, baseMargin, pageW, pageH, headerH, footerH);
 
@@ -235,26 +268,53 @@ export function PageView({
     }
 
     function onPointerLeave() {
-        if (dragRef.current) return;
+        if (dragRef.current || hfDragRef.current) return;
         setHoverSide(null);
         setLimitSide(null);
+        (wrapRef.current as any).style.cursor = "default";
     }
+
 
     function onPointerDown(e: React.PointerEvent) {
         if (thumbPreview) return;
-        if (!hoverSide) return;
-
-        const source = (page.marginSource ?? "preset") as "preset" | "page";
-        if (source === "preset" && preset.locked) {
-            // ลากไม่ได้ ต้องสลับเป็น page เอง
-            return;
-        }
+        if (e.target !== e.currentTarget) return;
 
         const el = wrapRef.current;
         if (!el) return;
+
         const rect = el.getBoundingClientRect();
         const scale = rect.width / preset.size.width;
+        const py = (e.clientY - rect.top) / scale;
 
+        const nearHeaderBottom = headerH > 0 && Math.abs(py - headerH) <= HF_HIT;
+        const nearFooterTop = footerH > 0 && Math.abs(py - (pageH - footerH)) <= HF_HIT;
+
+        // ✅ 1) handle header/footer resize ก่อน
+
+        if (nearHeaderBottom || nearFooterTop) {
+            (el as any).setPointerCapture?.(e.pointerId);
+            hfDragRef.current = {
+                presetId: preset.id,
+                kind: nearHeaderBottom ? "header" : "footer",
+                startClientY: e.clientY,
+                startHeaderH: headerH,
+                startFooterH: footerH,
+                scale,
+                pageH,
+            };
+
+            setEditingTarget(nearHeaderBottom ? "header" : "footer");
+            setSelectedNodeIds([]);
+            e.preventDefault();
+            return;
+        }
+
+        // ✅ 2) ค่อยไป handle margin drag
+        if (!hoverSide) return;
+
+        const source = (page.marginSource ?? "preset") as "preset" | "page";
+        if (source === "preset" && preset.locked) return;
+        (el as any).setPointerCapture?.(e.pointerId);
         dragRef.current = {
             pageId: page.id,
             presetId: preset.id,
@@ -268,36 +328,64 @@ export function PageView({
             bodyH,
         };
 
-
         setDragSide(hoverSide);
-        setPreviewMargin(baseMargin); // init preview
+        setPreviewMargin(baseMargin);
         e.preventDefault();
     }
 
     useEffect(() => {
         function onMove(ev: PointerEvent) {
+            // ✅ 1) header/footer resize first
+            const ctxHF = hfDragRef.current;
+            if (ctxHF) {
+                const dyClient = ev.clientY - ctxHF.startClientY;
+                const dy = dyClient / (ctxHF.scale || 1);
+
+                if (ctxHF.kind === "header") setPreviewHeaderH(ctxHF.startHeaderH + dy);
+                else setPreviewFooterH(ctxHF.startFooterH - dy);
+
+                return;
+            }
+
+
+            // ✅ 2) margin drag
             const ctx = dragRef.current;
             if (!ctx) return;
 
-            const { dx, dy } = clientToPageDelta(ev.clientX - ctx.startClientX, ev.clientY - ctx.startClientY, ctx.scale);
+            const { dx, dy } = clientToPageDelta(
+                ev.clientX - ctx.startClientX,
+                ev.clientY - ctx.startClientY,
+                ctx.scale
+            );
             const shift = ev.shiftKey;
 
-            const result = applyDrag(
-                ctx.side,
-                ctx.startMargin,
-                dx,
-                dy,
-                shift,
-                ctx.pageW,
-                ctx.bodyH
-            );
-
+            const result = applyDrag(ctx.side, ctx.startMargin, dx, dy, shift, ctx.pageW, ctx.bodyH);
             setPreviewMargin(result.margin);
             setLimitSide(result.hitLimit ? ctx.side : null);
-
         }
 
+
         function onUp(ev: PointerEvent) {
+            const ctxHF = hfDragRef.current;
+            if (ctxHF) {
+                const dyClient = ev.clientY - ctxHF.startClientY;
+                const dy = dyClient / (ctxHF.scale || 1);
+
+                if (ctxHF.kind === "header") {
+                    updateRepeatAreaHeightPx(ctxHF.presetId, "header", ctxHF.startHeaderH + dy);
+                } else {
+                    updateRepeatAreaHeightPx(ctxHF.presetId, "footer", ctxHF.startFooterH - dy);
+                }
+
+                hfDragRef.current = null;
+                setPreviewHeaderH(null);
+                setPreviewFooterH(null);
+
+                try { wrapRef.current?.releasePointerCapture?.(ev.pointerId); } catch { }
+                return;
+            }
+
+
             const ctx = dragRef.current;
             if (!ctx) return;
 
@@ -314,8 +402,11 @@ export function PageView({
 
             if (ctx.source === "preset") {
                 updatePresetMargin(ctx.presetId, patch);
+                try { wrapRef.current?.releasePointerCapture?.(ev.pointerId); } catch { }
+
             } else {
                 updatePageMargin(ctx.pageId, patch);
+                try { wrapRef.current?.releasePointerCapture?.(ev.pointerId); } catch { }
             }
 
             // clear
@@ -332,7 +423,8 @@ export function PageView({
             window.removeEventListener("pointerup", onUp);
         };
         // ⚠️ previewMargin ใช้ตอน commit ต้องอยู่ deps
-    }, [previewMargin, updatePageMargin, updatePresetMargin]);
+    }, [previewMargin, updatePageMargin, updatePresetMargin, updateRepeatAreaHeightPx, setEditingTarget, setSelectedNodeIds]);
+
 
     // ===== show margin overlay? =====
     const shouldShowMargin = showMargin ?? (active && !thumbPreview);
@@ -549,6 +641,7 @@ export function PageView({
                 </>
             )}
             {/* HEADER zone */}
+            {/* HEADER zone */}
             {headerH > 0 && (
                 <div
                     style={{
@@ -558,10 +651,21 @@ export function PageView({
                         width: pageW,
                         height: headerH,
                         overflow: "hidden",
-                        pointerEvents: editingTarget === "header" ? "auto" : "none",
-                        opacity: editingTarget === "page" ? 1 : editingTarget === "header" ? 1 : 0.25,
-                        zIndex: 5
+
+                        // ✅ รับคลิกตลอด เพื่อให้กดเข้า header ได้
+                        pointerEvents: "auto",
+
+                        opacity: editingTarget === "footer" ? 0.25 : 1,
+                        zIndex: 6,
                     }}
+                    onPointerDown={(e) => {
+                        if (thumbPreview) return;
+                        if (e.target !== e.currentTarget) return;
+
+                        setSelectedNodeIds([]);
+                        e.stopPropagation();
+                    }}
+
                 >
                     {renderNodes && headerNodes.map((n) => (
                         <NodeView key={n.id} node={n} document={document} />
@@ -570,12 +674,24 @@ export function PageView({
             )}
 
 
-            <div style={{ pointerEvents: editingTarget === "page" ? "auto" : "none" }}>
-                {renderNodes &&
-                    nodes.map((n) => (
-                        <NodeView key={n.id} node={n} document={document} />
-                    ))}
+
+            <div
+                style={{ pointerEvents: "auto" }}  // ✅ รับคลิกตลอดเหมือนกัน
+                onPointerDown={(e) => {
+                    if (thumbPreview) return;
+                    if (e.target !== e.currentTarget) return;
+
+                    // ✅ คลิกพื้นที่ว่างใน body = กลับ Page
+                    setEditingTarget("page");
+                    setSelectedNodeIds([]);
+                }}
+            >
+                {renderNodes && nodes.map((n) => (
+                    <NodeView key={n.id} node={n} document={document} />
+                ))}
             </div>
+
+
 
 
             {/* FOOTER zone */}
@@ -588,9 +704,16 @@ export function PageView({
                         width: pageW,
                         height: footerH,
                         overflow: "hidden",
-                        pointerEvents: editingTarget === "footer" ? "auto" : "none",
-                        opacity: editingTarget === "page" ? 1 : editingTarget === "footer" ? 1 : 0.25,
-                        zIndex: 5
+                        pointerEvents: "auto",
+                        opacity: editingTarget === "header" ? 0.25 : 1,
+                        zIndex: 6,
+                    }}
+                    onPointerDown={(e) => {
+                        if (thumbPreview) return;
+                        if (e.target !== e.currentTarget) return;
+
+                        setSelectedNodeIds([]);
+                        e.stopPropagation();
                     }}
                 >
                     {renderNodes && footerNodes.map((n) => (
@@ -598,6 +721,7 @@ export function PageView({
                     ))}
                 </div>
             )}
+
         </div>
     );
 }

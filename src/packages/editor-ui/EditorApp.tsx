@@ -71,6 +71,7 @@ export function EditorApp() {
         session,
         setActivePage,
         setZoom,
+        setEditingTarget,
         addPageToEnd,
         insertPageAfter,
         // deleteActivePage, // เอาออกได้
@@ -236,7 +237,60 @@ export function EditorApp() {
         setAddPresetOpen(true);
     };
 
+    function LayerBar({
+        value,
+        onChange,
+    }: {
+        value: "page" | "header" | "footer";
+        onChange: (v: "page" | "header" | "footer") => void;
+    }) {
+        const btn = (v: "page" | "header" | "footer", label: string) => {
+            const active = value === v;
+            return (
+                <button
+                    key={v}
+                    onClick={() => onChange(v)}
+                    style={{
+                        padding: "6px 10px",
+                        borderRadius: 10,
+                        border: "1px solid #e5e7eb",
+                        background: active ? "#111827" : "#ffffff",
+                        color: active ? "#ffffff" : "#111827",
+                        cursor: "pointer",
+                        fontSize: 12,
+                        fontWeight: 600,
+                    }}
+                >
+                    {label}
+                </button>
+            );
+        };
+
+        return (
+            <div
+                style={{
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "center",
+                    padding: "8px 10px",
+                    borderRadius: 12,
+                    border: "1px solid #e5e7eb",
+                    background: "rgba(255,255,255,0.9)",
+                    backdropFilter: "blur(6px)",
+                    boxShadow: "0 10px 25px rgba(0,0,0,0.12)",
+                }}
+                title="Editing layer"
+            >
+                {btn("page", "Page")}
+                {btn("header", "Header")}
+                {btn("footer", "Footer")}
+            </div>
+        );
+    }
+
+
     return (
+
         <div ref={rootRef} style={{ height: "100vh", overflow: "hidden", position: "relative" }}>
             <div style={{ position: "absolute", inset: 0, background: "#e5e7eb" }}>
                 <div ref={centerRef} style={{ height: "100%", overflow: "auto", padding: 16 }}>
@@ -256,6 +310,11 @@ export function EditorApp() {
 
                 <div style={{ position: "absolute", top: 12, right: rightW + 6 + 12, zIndex: 50 }}>
                     <ZoomBar zoom={zoom} setZoom={setZoom} />
+                    <LayerBar
+                        value={session.editingTarget ?? "page"}
+                        onChange={setEditingTarget}
+                    />
+
                 </div>
             </div>
 
