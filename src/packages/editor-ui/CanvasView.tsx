@@ -12,7 +12,7 @@ import { useScrollToPage } from "./hooks/useScrollToPage";
 
 import { usePageNodesMock } from "./hooks/usePageNodesMock";
 import { usePageNavigator } from "./hooks/usePageNavigator";
-
+import { useEditorSessionStore } from "./store/editorStore";
 
 export type CanvasNavigatorHandle = {
     navigateToPage: (pageId: string, opts?: {
@@ -24,12 +24,9 @@ export type CanvasNavigatorHandle = {
 
 type CanvasViewProps = {
     document: DocumentJson;
-    activePageId: string | null;
     showMargin?: boolean;
     mode?: CanvasMode;
     onAddPageAfter?: (pageId: string) => Id | null;
-    zoom?: number;
-    setActivePageId?: (pageId: string) => void;
     scrollRootRef?: React.RefObject<HTMLElement | null>;
     onViewingPageIdChange?: (pageId: string | null) => void;
 };
@@ -49,12 +46,11 @@ export const CanvasView = forwardRef<CanvasNavigatorHandle, CanvasViewProps>(
     function CanvasView(
         {
             document,
-            activePageId,
+
             showMargin = true,
             mode = "single",
             onAddPageAfter,
-            zoom = 1,
-            setActivePageId,
+
             scrollRootRef,
             onViewingPageIdChange,
         },
@@ -64,7 +60,9 @@ export const CanvasView = forwardRef<CanvasNavigatorHandle, CanvasViewProps>(
         const pageRefs = useRef<Record<string, HTMLDivElement | null>>({});
         const rootEl = scrollRootRef?.current ?? null;
         const pendingNavRef = useRef<Id | null>(null);
-
+        const { session, setActivePage } = useEditorSessionStore();
+        const activePageId = session.activePageId;
+        const zoom = session.zoom;
 
         /* ---------- helpers: pages ordered ---------- */
         const pages: PageJson[] = useMemo(() => {
@@ -125,8 +123,7 @@ export const CanvasView = forwardRef<CanvasNavigatorHandle, CanvasViewProps>(
             lastManualSelectAtRef,
 
             activePageId,
-            setActivePageId,
-
+            setActivePageId: (id: string) => setActivePage(id),
             onViewingPageIdChange,
 
             ensureAround: (pageId, r) => nodesMock.ensureAround(pageId, r),
@@ -154,12 +151,32 @@ export const CanvasView = forwardRef<CanvasNavigatorHandle, CanvasViewProps>(
 
 
         const anchorIndex = nav.anchorIndex;
+        const GAP_RADIUS = 1; // ลอง 1 ก่อน ถ้ายังอยากให้กดเพิ่มหน้าได้ไกล ๆ ค่อยเพิ่มเป็น 2
+        const indexById = useMemo(() => {
+            const m: Record<string, number> = {};
+            pages.forEach((p, i) => (m[p.id] = i));
+            return m;
+        }, [pages]);
+
+        const activeIndex = activePageId ? (indexById[activePageId] ?? -1) : -1;
+
+        const shouldRenderGap2 = (idx: number) =>
+            Math.abs(idx - anchorIndex) <= GAP_RADIUS ||
+            (activeIndex >= 0 && Math.abs(idx - activeIndex) <= GAP_RADIUS);
+
 
         /* ---------- render ---------- */
         if (mode === "scroll") {
             return (
                 <div style={{ padding: 24 }}>
-                    <div style={{ zoom }}>
+                    <div
+                        style={{
+                            transform: `scale(${zoom})`,
+                            transformOrigin: "top center",
+                            willChange: "transform",
+                        }}
+                    >
+
                         {pages.map((p, idx) => {
                             const dist = Math.abs(idx - anchorIndex);
                             const level = getLevel(dist, 2, 8);
@@ -186,43 +203,49 @@ export const CanvasView = forwardRef<CanvasNavigatorHandle, CanvasViewProps>(
                                     />
 
                                     {idx < pages.length - 1 && (
-                                        <GapAdd
-                                            width={getPageWidth(p.id)}
-                                            onAdd={() => {
-                                                markManualSelect();
-                                                const newId = onAddPageAfter?.(p.id);
-                                                if (!newId) return;
-
-                                                setActivePageId?.(newId);
-
-                                                // ✅ เก็บไว้ก่อน รอ pages update แล้วค่อย navigate ใน useEffect
-                                                pendingNavRef.current = newId;
-                                            }}
-                                        />
-
-
+                                        shouldRenderGap2(idx) ? (
+                                            <GapAdd
+                                                width={getPageWidth(p.id)}
+                                                scrollRoot={rootEl}
+                                                armDelayMs={200}
+                                                onAdd={() => {
+                                                    markManualSelect();
+                                                    const newId = onAddPageAfter?.(p.id);
+                                                    if (!newId) return;
+                                                    /* setActivePage(newId); */
+                                                    pendingNavRef.current = newId;
+                                                }}
+                                            />
+                                        ) : (
+                                            // spacer เบา ๆ แทน (สำคัญ: ไม่ให้ layout ขยับ)
+                                            <div style={{ height: GAP_PX }} />
+                                        )
                                     )}
                                 </React.Fragment>
                             );
                         })}
 
                         {pages.length > 0 && (
-                            <GapAdd
-                                width={getPageWidth(pages[pages.length - 1].id)}
-                                onAdd={() => {
-                                    markManualSelect();
-                                    const lastId = pages[pages.length - 1].id;
-                                    const newId = onAddPageAfter?.(lastId);
-                                    if (!newId) return;
+                            shouldRenderGap2(pages.length - 1) ? (
+                                <GapAdd
+                                    width={getPageWidth(pages[pages.length - 1].id)}
+                                    scrollRoot={rootEl}
+                                    armDelayMs={200}
+                                    onAdd={() => {
+                                        markManualSelect();
+                                        const lastId = pages[pages.length - 1].id;
+                                        const newId = onAddPageAfter?.(lastId);
+                                        if (!newId) return;
+                                        setActivePage(newId);
 
-                                    setActivePageId?.(newId);
-
-                                    // ✅ เก็บไว้ก่อน รอ pages update แล้วค่อย navigate ใน useEffect
-                                    pendingNavRef.current = newId;
-                                }}
-                            />
-
+                                        pendingNavRef.current = newId;
+                                    }}
+                                />
+                            ) : (
+                                <div style={{ height: GAP_PX }} />
+                            )
                         )}
+
                     </div>
                 </div>
             );
@@ -234,7 +257,12 @@ export const CanvasView = forwardRef<CanvasNavigatorHandle, CanvasViewProps>(
 
         return (
             <div style={{ padding: 24 }}>
-                <div style={{ zoom }}>
+                <div
+                    style={{
+                        transform: `scale(${zoom})`,
+                        transformOrigin: "top center",
+                        willChange: "transform",
+                    }}>
                     <PageView
                         document={document}
                         page={page}
@@ -242,7 +270,8 @@ export const CanvasView = forwardRef<CanvasNavigatorHandle, CanvasViewProps>(
                         active
                         onActivate={() => {
                             markManualSelect();
-                            setActivePageId?.(page.id);
+                            setActivePage(page.id);
+
                         }}
                     />
                 </div>

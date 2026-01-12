@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useEditorStore } from "./store/editorStore";
+import { useEditorStore, useEditorSessionStore } from "./store/editorStore";
 import { CanvasView } from "./CanvasView";
 import { Inspector } from "./Inspector";
 import type { PageJson } from "../editor-core/schema";
@@ -68,19 +68,17 @@ const RIGHT_KEY = "editor:rightWidth";
 export function EditorApp() {
     const {
         doc,
-        session,
-        setActivePage,
-        setZoom,
-        setEditingTarget,
         addPageToEnd,
         insertPageAfter,
-        // deleteActivePage, // เอาออกได้
         deletePage,
         createPagePreset,
         updatePreset,
         deletePresetAndReassignPages,
     } = useEditorStore();
 
+    const { session, setActivePage, setZoom, setEditingTarget } = useEditorSessionStore();
+    const activePageId = session.activePageId;
+    const zoom = session.zoom;
 
     const canvasNavRef = useRef<CanvasNavigatorHandle | null>(null);
     const centerRef = useRef<HTMLDivElement | null>(null);
@@ -97,11 +95,8 @@ export function EditorApp() {
 
     const addPresetMode = doc.pageOrder.length === 0 ? "bootstrap" : "library";
 
-    // viewingPageId จะเก็บ local ก็ได้ (หรือจะย้ายเข้า store ทีหลัง)
     const [viewingPageId, setViewingPageId] = useState<string | null>(session.activePageId);
 
-    const activePageId = session.activePageId;
-    const zoom = session.zoom;
     const activePresetId = activePageId ? doc.pagesById[activePageId]?.presetId : null;
     useEffect(() => {
         const el = centerRef.current;
@@ -118,8 +113,6 @@ export function EditorApp() {
         el.addEventListener("wheel", onWheel, { passive: false });
         return () => el.removeEventListener("wheel", onWheel);
     }, [setZoom, zoom]);
-
-
 
     useEffect(() => {
         setMounted(true);
@@ -144,13 +137,6 @@ export function EditorApp() {
     const pages = useMemo(() => {
         return doc.pageOrder.map((id) => doc.pagesById[id]).filter(Boolean) as PageJson[];
     }, [doc.pageOrder, doc.pagesById]);
-
-    useEffect(() => {
-        // sync viewing ให้ตาม active เวลา active เปลี่ยนจากการกด/เพิ่มหน้า
-        setViewingPageId(activePageId ?? null);
-    }, [activePageId]);
-
-
 
     const draggingLeft = useRef(false);
     const draggingRight = useRef(false);
@@ -288,6 +274,77 @@ export function EditorApp() {
         );
     }
 
+    const viewingRef = useRef<string | null>(viewingPageId);
+    useEffect(() => { viewingRef.current = viewingPageId; }, [viewingPageId]);
+
+    const lastSetAtRef = useRef(0);
+
+    const handleViewingChange = (id: string | null) => {
+        const now = performance.now();
+        if (now - lastSetAtRef.current < 80) return; // throttle
+        lastSetAtRef.current = now;
+
+        if (id === viewingRef.current) return;
+        setViewingPageId(id);
+    };
+
+    useEffect(() => {
+        const el = centerRef.current;
+        if (!el) return;
+
+        let raf: number | null = null;
+        let v = 0;
+
+        // ปรับความช้าได้ตรงนี้
+        const WHEEL_GAIN = 0.15;   // ยิ่งต่ำยิ่งช้า (ลอง 0.08 - 0.18)
+        const MAX_V = 14;          // จำกัดสปีดสูงสุด (ลอง 10 - 22)
+        const FRICTION = 0.88;     // ต้องใกล้ 1 ถึงจะนิ่ม (0.85 - 0.93)
+
+        const isLikelyMouseWheel = (e: WheelEvent) => {
+            // trackpad มัก delta เล็กและยิงถี่ ๆ
+            const dy = Math.abs(e.deltaY);
+
+            // เมาส์ล้อบนวินโดวส์มักกระโดดเป็นก้อน ๆ ใหญ่ ๆ เช่น 80-120+
+            if (dy >= 50) return true;
+
+            // deltaMode=1/2 แทบชัวร์ว่าเป็น wheel แบบ line/page
+            if (e.deltaMode !== 0) return true;
+
+            return false;
+        };
+
+        const tick = () => {
+            raf = null;
+            if (Math.abs(v) < 0.1) { v = 0; return; }
+            el.scrollTop += v;
+            v *= FRICTION;
+            raf = requestAnimationFrame(tick);
+        };
+
+        const onWheel = (e: WheelEvent) => {
+            // ปล่อย trackpad ให้ native จัดการ (จะได้ 1:1, inertial ธรรมชาติ)
+            if (!isLikelyMouseWheel(e)) return;
+
+            // จับเฉพาะเมาส์ล้อ: หน่วง + สมูด
+            e.preventDefault();
+
+            // แปลง delta ให้เป็น px แบบคงที่พอประมาณ
+            // (บน mouse wheel บางตัว deltaY มาเป็น 100 อยู่แล้ว)
+            const dyPx = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+
+            v += dyPx * WHEEL_GAIN;
+            if (v > MAX_V) v = MAX_V;
+            if (v < -MAX_V) v = -MAX_V;
+
+            if (raf == null) raf = requestAnimationFrame(tick);
+        };
+
+        el.addEventListener("wheel", onWheel, { passive: false });
+        return () => {
+            el.removeEventListener("wheel", onWheel);
+            if (raf != null) cancelAnimationFrame(raf);
+        };
+    }, []);
 
     return (
 
@@ -297,15 +354,12 @@ export function EditorApp() {
                     <CanvasView
                         ref={canvasNavRef}
                         document={doc}
-                        activePageId={activePageId}
-                        setActivePageId={setActivePage}
                         mode="scroll"
-                        zoom={zoom}
                         scrollRootRef={centerRef}
                         onAddPageAfter={insertPageAfter}
-                        onViewingPageIdChange={setViewingPageId}
-
+                        onViewingPageIdChange={handleViewingChange}
                     />
+
                 </div>
 
                 <div style={{ position: "absolute", top: 12, right: rightW + 6 + 12, zIndex: 50 }}>
@@ -347,30 +401,26 @@ export function EditorApp() {
                     }}
                     onInsertAfter={(afterId) => {
                         const newId = insertPageAfter(afterId);
-                        setActivePage(newId);
+
                         setViewingPageId(newId);
                         requestAnimationFrame(() => {
                             canvasNavRef.current?.navigateToPage(newId, { source: "pagesPanel", behavior: "auto" });
                         });
+
                         return newId;
                     }}
 
                     onAddToEnd={() => {
                         const newId = addPageToEnd();
 
-                        // ✅ 1) ทำให้ active เป็นหน้าใหม่แน่นอน
-                        setActivePage(newId);
-
-                        // ✅ 2) ให้ left panel follow ถูกหน้า
                         setViewingPageId(newId);
-
-                        // ✅ 3) สั่ง canvas ไปหน้าใหม่ (รอ 1 เฟรมให้ page metrics อัปเดตก่อน)
                         requestAnimationFrame(() => {
                             canvasNavRef.current?.navigateToPage(newId, { source: "pagesPanel", behavior: "auto" });
                         });
 
                         return newId;
                     }}
+
 
                 />
             </div>
@@ -464,12 +514,12 @@ export function EditorApp() {
 
                     // ✅ ถ้าเป็น bootstrap: store จะสร้าง page 1 ให้ แล้วเราพา canvas ไปหน้าใหม่ให้ชัวร์
                     if (createdPageId) {
-                        setActivePage(createdPageId);
                         setViewingPageId(createdPageId);
                         requestAnimationFrame(() => {
                             canvasNavRef.current?.navigateToPage(createdPageId, { source: "system", behavior: "auto" });
                         });
                     }
+
                 }}
 
 

@@ -66,6 +66,17 @@ type Store = {
 
 };
 
+type SessionOnlyStore = {
+    session: EditorSession;
+    setActivePage: (id: Id | null) => void;
+    setZoom: (z: number) => void;
+    setSelectedNodeIds: (ids: Id[]) => void;
+    setEditingTarget: (t: "page" | "header" | "footer") => void;
+};
+
+const SessionCtx = createContext<SessionOnlyStore | null>(null);
+
+
 const Ctx = createContext<Store | null>(null);
 
 function uid(prefix: string) {
@@ -195,6 +206,21 @@ export function EditorStoreProvider({
     function applySession(mut: (s: EditorSession) => EditorSession) {
         setSession(mut);
     }
+    const sessionStore = useMemo<SessionOnlyStore>(() => {
+        return {
+            session,
+            setActivePage: (id) => setSession((s) => ({ ...s, activePageId: id })),
+            setZoom: (z) => setSession((s) => ({ ...s, zoom: z })),
+            setSelectedNodeIds: (ids) => setSession((s) => ({ ...s, selectedNodeIds: ids })),
+            setEditingTarget: (t) =>
+                setSession((s) => ({
+                    ...s,
+                    editingTarget: t,
+                    selectedNodeIds: [],
+                    hoverNodeId: null,
+                })),
+        };
+    }, [session]);
 
 
     function ensureHFCloneForPreset(draft: DocumentJson, presetId: Id) {
@@ -584,14 +610,22 @@ export function EditorStoreProvider({
         };
     }, [doc, session]);
 
-    return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
+    return (
+        <Ctx.Provider value={store}>
+            <SessionCtx.Provider value={sessionStore}>
+                {children}
+            </SessionCtx.Provider>
+        </Ctx.Provider>
+    );
 }
-
-
 
 export function useEditorStore() {
     const v = useContext(Ctx);
     if (!v) throw new Error("useEditorStore must be used within EditorStoreProvider");
     return v;
 }
-
+export function useEditorSessionStore() {
+    const v = useContext(SessionCtx);
+    if (!v) throw new Error("useEditorSessionStore must be used within EditorStoreProvider");
+    return v;
+}

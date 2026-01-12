@@ -1,24 +1,73 @@
 "use client";
 import React from "react";
 
-export function GapAdd({ onAdd, width = 820 }: { onAdd: () => void; width?: number }) {
+export function GapAdd({
+    onAdd,
+    width = 820,
+    scrollRoot,
+    armDelayMs = 200,
+}: {
+    onAdd: () => void;
+    width?: number;
+    scrollRoot?: HTMLElement | null;
+    armDelayMs?: number;
+}) {
     const [hover, setHover] = React.useState(false);
+    const [armed, setArmed] = React.useState(true);
+
+    const timerRef = React.useRef<number | null>(null);
+
+    const hoverRef = React.useRef(false);
+    const armedRef = React.useRef(true);
+
+    React.useEffect(() => { hoverRef.current = hover; }, [hover]);
+    React.useEffect(() => { armedRef.current = armed; }, [armed]);
+
+    React.useEffect(() => {
+        const el = scrollRoot;
+        if (!el) return;
+
+        const onScroll = () => {
+            if (armedRef.current) setArmed(false);
+            if (hoverRef.current) setHover(false);
+
+            if (timerRef.current) window.clearTimeout(timerRef.current);
+            timerRef.current = window.setTimeout(() => {
+                setArmed(true);
+            }, armDelayMs);
+        };
+
+        el.addEventListener("scroll", onScroll, { passive: true });
+        return () => {
+            el.removeEventListener("scroll", onScroll);
+            if (timerRef.current) window.clearTimeout(timerRef.current);
+            timerRef.current = null;
+        };
+    }, [scrollRoot, armDelayMs]);
 
     return (
         <div
             data-gap="1"
-            onClick={onAdd}
-            onMouseEnter={() => setHover(true)}
+            onClick={() => {
+                if (!armed) return;
+                onAdd();
+            }}
+            onMouseEnter={() => {
+                if (!armed) return;
+                setHover(true);
+            }}
             onMouseLeave={() => setHover(false)}
             style={{
                 height: hover ? 72 : 36,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                cursor: "pointer",
+                cursor: armed ? "pointer" : "default",
                 userSelect: "none",
                 transition: "height 120ms ease",
+                opacity: armed ? 1 : 0.7,
             }}
+            title={!armed ? "Scrolling…" : "Add page"}
         >
             <div
                 style={{
@@ -28,6 +77,7 @@ export function GapAdd({ onAdd, width = 820 }: { onAdd: () => void; width?: numb
                     margin: "0 auto",
                     height: hover ? 56 : 8,
                     transition: "height 120ms ease",
+                    pointerEvents: "none", // กันลูกๆ แย่ง event
                 }}
             >
                 <div

@@ -1,9 +1,49 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { DocumentJson, Id, PagePreset } from "../editor-core/schema";
 import { getOrientation } from "../editor-core/schema";
 import { useEditorStore } from "./store/editorStore";
+import CollapsibleSection from "./CollapsibleSection";
+
+type InspectorCollapse = {
+    page: boolean;
+    paper: boolean;
+    hf: boolean;
+    margins: boolean;
+};
+
+const DEFAULT_OPEN: InspectorCollapse = {
+    page: true,
+    paper: false,
+    hf: false,
+    margins: true,
+};
+
+const collapseKey = (pageId: string) => `inspector-collapse:${pageId}`;
+
+function readCollapse(pageId: string): InspectorCollapse {
+    try {
+        const raw = localStorage.getItem(collapseKey(pageId));
+        if (!raw) return DEFAULT_OPEN;
+        const v = JSON.parse(raw);
+        return {
+            page: !!v.page,
+            paper: !!v.paper,
+            hf: !!v.hf,
+            margins: !!v.margins,
+        };
+    } catch {
+        return DEFAULT_OPEN;
+    }
+}
+
+function writeCollapse(pageId: string, state: InspectorCollapse) {
+    try {
+        localStorage.setItem(collapseKey(pageId), JSON.stringify(state));
+    } catch { }
+}
+
 
 function clampInt(n: number, min: number, max: number) {
     const x = Number.isFinite(n) ? n : min;
@@ -33,22 +73,6 @@ function FieldRow({
     );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-    return (
-        <div
-            style={{
-                border: "1px solid #e5e7eb",
-                borderRadius: 12,
-                padding: 12,
-                marginBottom: 12,
-                background: "#fff",
-            }}
-        >
-            <div style={{ fontWeight: 800, marginBottom: 10 }}>{title}</div>
-            {children}
-        </div>
-    );
-}
 
 export function Inspector({
     doc,
@@ -78,6 +102,20 @@ export function Inspector({
     const page = activePageId ? doc.pagesById[activePageId] : null;
     const preset = page ? doc.pagePresetsById[page.presetId] : null;
 
+    const [open, setOpen] = useState<InspectorCollapse>(DEFAULT_OPEN);
+
+    useEffect(() => {
+        if (!page?.id) return;
+        setOpen(readCollapse(page.id));
+    }, [page?.id]);
+
+    useEffect(() => {
+        if (!page?.id) return;
+        writeCollapse(page.id, open);
+    }, [page?.id, open]);
+
+    const toggle = (k: keyof InspectorCollapse) =>
+        setOpen((s) => ({ ...s, [k]: !s[k] }));
     const setPagePreset = (nextPresetId: Id) => {
         if (!page) return;
         setPagePresetAction(page.id, nextPresetId);
@@ -202,7 +240,7 @@ export function Inspector({
                 </div>
             )}
 
-            <Section title="Page">
+            <CollapsibleSection open={open.page} onToggle={() => toggle("page")} title="Page">
                 <FieldRow label="Page">
                     <div style={{ fontWeight: 700 }}>{page.name ?? page.id}</div>
                 </FieldRow>
@@ -241,51 +279,73 @@ export function Inspector({
                         + Add preset
                     </button>
                 </div>
-            </Section>
+            </CollapsibleSection >
 
-            <Section title="Paper">
+            <CollapsibleSection open={open.paper} onToggle={() => toggle("paper")} title="Paper">
                 <FieldRow label="Preset">
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "center" }}>
-                        <div style={{ fontWeight: 800, color: "#111827" }}>{preset.name}</div>
+                    <div
+                        style={{
+                            position: "relative",
+                            paddingRight: 36, // กันพื้นที่ให้ปุ่ม
+                            minWidth: 0,
+                        }}
+                    >
+                        <div
+                            style={{
+                                fontWeight: 800,
+                                color: "#111827",
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                            }}
+                            title={preset.name}
+                        >
+                            {preset.name}
+                        </div>
 
                         <button
                             type="button"
                             onClick={() => onOpenEditPreset?.(page.presetId)}
                             style={{
-                                padding: "6px 10px",
+                                position: "absolute",
+                                right: 0,
+                                top: -2,
+                                width: 28,
+                                height: 28,
                                 borderRadius: 10,
                                 border: "1px solid #e5e7eb",
                                 background: "#fff",
                                 cursor: "pointer",
-                                fontWeight: 800,
-                                whiteSpace: "nowrap",
+                                fontWeight: 900,
+                                display: "grid",
+                                placeItems: "center",
+                                opacity: 0.85,
                             }}
+                            title="Edit paper"
+                            aria-label="Edit paper"
+                            onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+                            onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.85")}
                         >
-                            ✎ Edit
+                            ✎
                         </button>
                     </div>
                 </FieldRow>
+
 
                 <FieldRow label="Orientation">
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                         <div style={{ fontWeight: 700, color: "#374151" }}>
                             {orientation === "portrait" ? "Portrait" : "Landscape"}
                         </div>
-                        <div style={{ flex: 1 }} />
-                        <button disabled={true} onClick={() => setPresetOrientation("portrait")} style={btnStyle(isLocked)}>
-                            Portrait
-                        </button>
-                        <button disabled={true} onClick={() => setPresetOrientation("landscape")} style={btnStyle(isLocked)}>
-                            Landscape
-                        </button>
+
                     </div>
                 </FieldRow>
 
                 <FieldRow label="Source">
                     <div style={{ color: "#6b7280", fontWeight: 700 }}>{preset.source ?? "custom"}</div>
                 </FieldRow>
-            </Section>
-            <Section title="Header / Footer">
+            </CollapsibleSection >
+            <CollapsibleSection open={open.hf} onToggle={() => toggle("hf")} title="Header / Footer">
                 {(() => {
                     const hf = doc.headerFooterByPresetId?.[preset.id];
                     const headerPx = hf?.header?.heightPx ?? 0;
@@ -394,7 +454,7 @@ export function Inspector({
                         </>
                     );
                 })()}
-            </Section>
+            </CollapsibleSection >
 
             <FieldRow label="Status">
                 {isLocked ? (
@@ -416,7 +476,7 @@ export function Inspector({
                 )}
             </FieldRow>
 
-            <Section title="Margins">
+            <CollapsibleSection open={open.margins} onToggle={() => toggle("margins")} title="Margins">
                 {/* ✅ NEW: source selector */}
                 <FieldRow label="Applies to">
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -512,7 +572,7 @@ export function Inspector({
                         Paper นี้ถูกล็อก — ถ้าต้องการปรับเฉพาะหน้า ให้เลือก <b>This page</b>
                     </div>
                 )}
-            </Section>
+            </CollapsibleSection >
         </div>
     );
 }
