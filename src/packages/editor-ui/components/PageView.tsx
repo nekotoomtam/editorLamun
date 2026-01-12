@@ -86,7 +86,11 @@ export function PageView({
     const pageW = preset.size.width;
     const pageH = preset.size.height;
     const bodyH = Math.max(0, pageH - headerH - footerH);
-
+    const MAX_HEADER_PCT = 0.25;
+    const MAX_FOOTER_PCT = 0.20;
+    const MIN_BODY_H = 120; // หรือ 100 ตามใจตูม
+    const MIN_HEADER_H = 0;
+    const MIN_FOOTER_H = 0;
 
     // ===== preview + dragging state =====
     const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -127,7 +131,19 @@ export function PageView({
         bodyH: number;
     }>(null);
 
+    function clampHeader(nextHeaderH: number, footerH: number, pageH: number) {
+        const maxByPct = pageH * MAX_HEADER_PCT;
+        const maxByBody = pageH - footerH - MIN_BODY_H;
+        const max = Math.min(maxByPct, maxByBody);
+        return clamp(nextHeaderH, MIN_HEADER_H, Math.max(MIN_HEADER_H, max));
+    }
 
+    function clampFooter(nextFooterH: number, headerH: number, pageH: number) {
+        const maxByPct = pageH * MAX_FOOTER_PCT;
+        const maxByBody = pageH - headerH - MIN_BODY_H;
+        const max = Math.min(maxByPct, maxByBody);
+        return clamp(nextFooterH, MIN_FOOTER_H, Math.max(MIN_FOOTER_H, max));
+    }
 
     function clientToPageDelta(dxClient: number, dyClient: number, scale: number) {
         // scale = rect.width / pageW  => pageDelta = clientDelta / scale
@@ -292,6 +308,13 @@ export function PageView({
         // ✅ 1) handle header/footer resize ก่อน
 
         if (nearHeaderBottom || nearFooterTop) {
+            if (nearHeaderBottom) {
+                if (editingTarget !== "header") return; // ยังไม่ให้ลาก
+            }
+            if (nearFooterTop) {
+                if (editingTarget !== "footer") return;
+            }
+
             (el as any).setPointerCapture?.(e.pointerId);
             hfDragRef.current = {
                 presetId: preset.id,
@@ -341,8 +364,17 @@ export function PageView({
                 const dyClient = ev.clientY - ctxHF.startClientY;
                 const dy = dyClient / (ctxHF.scale || 1);
 
-                if (ctxHF.kind === "header") setPreviewHeaderH(ctxHF.startHeaderH + dy);
-                else setPreviewFooterH(ctxHF.startFooterH - dy);
+                if (ctxHF.kind === "header") {
+                    const raw = ctxHF.startHeaderH + dy;
+                    const curFooterH = previewFooterH ?? hf.footerH;
+                    setPreviewHeaderH(clampHeader(raw, curFooterH, ctxHF.pageH));
+                } else {
+                    const raw = ctxHF.startFooterH - dy;
+                    const curHeaderH = previewHeaderH ?? hf.headerH;
+                    setPreviewFooterH(clampFooter(raw, curHeaderH, ctxHF.pageH));
+                }
+
+
 
                 return;
             }
@@ -372,10 +404,17 @@ export function PageView({
                 const dy = dyClient / (ctxHF.scale || 1);
 
                 if (ctxHF.kind === "header") {
-                    updateRepeatAreaHeightPx(ctxHF.presetId, "header", ctxHF.startHeaderH + dy);
+                    const raw = ctxHF.startHeaderH + dy;
+                    const curFooterH = previewFooterH ?? hf.footerH;
+                    const next = clampHeader(raw, curFooterH, ctxHF.pageH);
+                    updateRepeatAreaHeightPx(ctxHF.presetId, "header", roundInt(next));
                 } else {
-                    updateRepeatAreaHeightPx(ctxHF.presetId, "footer", ctxHF.startFooterH - dy);
+                    const raw = ctxHF.startFooterH - dy;
+                    const curHeaderH = previewHeaderH ?? hf.headerH;
+                    const next = clampFooter(raw, curHeaderH, ctxHF.pageH);
+                    updateRepeatAreaHeightPx(ctxHF.presetId, "footer", roundInt(next));
                 }
+
 
                 hfDragRef.current = null;
                 setPreviewHeaderH(null);
@@ -453,7 +492,13 @@ export function PageView({
         const { nodesById, nodeOrder } = getNodesByTarget(page.id, "footer");
         return (nodeOrder ?? []).map(id => nodesById[id]).filter(Boolean).filter(n => (n as any).visible !== false);
     }, [renderNodes, footerH, page.id, getNodesByTarget]);
-    console.log("HF", page.presetId, { headerH, footerH }, document.headerFooterByPresetId?.[page.presetId]);
+
+    const isHeaderMode = editingTarget === "header";
+    const isFooterMode = editingTarget === "footer";
+    const isPageMode = editingTarget === "page";
+
+    const showZones = true;
+
     return (
         <div
             ref={(el) => {
@@ -640,87 +685,95 @@ export function PageView({
                     )}
                 </>
             )}
-            {/* HEADER zone */}
-            {/* HEADER zone */}
-            {headerH > 0 && (
-                <div
-                    style={{
-                        position: "absolute",
-                        left: 0,
-                        top: 0,
-                        width: pageW,
-                        height: headerH,
-                        overflow: "hidden",
+            {showZones && (
+                <>
+                    {/* ===== Header zone ===== */}
+                    {headerH > 0 && (
+                        <div
+                            style={{
+                                position: "absolute",
+                                left: 0,
+                                top: 0,
+                                width: pageW,
+                                height: headerH,
 
-                        // ✅ รับคลิกตลอด เพื่อให้กดเข้า header ได้
-                        pointerEvents: "auto",
+                                // จางมาก ไม่รบกวนสายตา
+                                background: "rgba(0,0,0,0.015)",
 
-                        opacity: editingTarget === "footer" ? 0.25 : 1,
-                        zIndex: 6,
-                    }}
-                    onPointerDown={(e) => {
-                        if (thumbPreview) return;
-                        if (e.target !== e.currentTarget) return;
+                                // เน้นที่เส้น
+                                borderBottom: `1px solid ${isHeaderMode ? "rgba(59,130,246,0.65)" : "rgba(0,0,0,0.12)"
+                                    }`,
 
-                        setSelectedNodeIds([]);
-                        e.stopPropagation();
-                    }}
+                                pointerEvents: "none",
+                                zIndex: 2,
+                            }}
+                        />
+                    )}
 
-                >
-                    {renderNodes && headerNodes.map((n) => (
-                        <NodeView key={n.id} node={n} document={document} />
-                    ))}
-                </div>
+                    {/* ===== Footer zone ===== */}
+                    {footerH > 0 && (
+                        <div
+                            style={{
+                                position: "absolute",
+                                left: 0,
+                                top: pageH - footerH,
+                                width: pageW,
+                                height: footerH,
+
+                                background: "rgba(0,0,0,0.015)",
+
+                                borderTop: `1px solid ${isFooterMode ? "rgba(59,130,246,0.65)" : "rgba(0,0,0,0.12)"
+                                    }`,
+
+                                pointerEvents: "none",
+                                zIndex: 2,
+                            }}
+                        />
+                    )}
+
+                    {/* ===== Header label (เฉพาะตอนเข้าโหมด) ===== */}
+                    {isHeaderMode && headerH > 0 && (
+                        <div
+                            style={{
+                                position: "absolute",
+                                left: 12,
+                                top: 8,
+                                padding: "3px 8px",
+                                borderRadius: 999,
+                                background: "rgba(59,130,246,0.85)",
+                                color: "#fff",
+                                fontSize: 12,
+                                pointerEvents: "none",
+                                zIndex: 5,
+                            }}
+                        >
+                            Header
+                        </div>
+                    )}
+
+                    {/* ===== Footer label (เฉพาะตอนเข้าโหมด) ===== */}
+                    {isFooterMode && footerH > 0 && (
+                        <div
+                            style={{
+                                position: "absolute",
+                                left: 12,
+                                top: pageH - footerH + 8,
+                                padding: "3px 8px",
+                                borderRadius: 999,
+                                background: "rgba(59,130,246,0.85)",
+                                color: "#fff",
+                                fontSize: 12,
+                                pointerEvents: "none",
+                                zIndex: 5,
+                            }}
+                        >
+                            Footer
+                        </div>
+                    )}
+                </>
             )}
 
 
-
-            <div
-                style={{ pointerEvents: "auto" }}  // ✅ รับคลิกตลอดเหมือนกัน
-                onPointerDown={(e) => {
-                    if (thumbPreview) return;
-                    if (e.target !== e.currentTarget) return;
-
-                    // ✅ คลิกพื้นที่ว่างใน body = กลับ Page
-                    setEditingTarget("page");
-                    setSelectedNodeIds([]);
-                }}
-            >
-                {renderNodes && nodes.map((n) => (
-                    <NodeView key={n.id} node={n} document={document} />
-                ))}
-            </div>
-
-
-
-
-            {/* FOOTER zone */}
-            {footerH > 0 && (
-                <div
-                    style={{
-                        position: "absolute",
-                        left: 0,
-                        top: pageH - footerH,
-                        width: pageW,
-                        height: footerH,
-                        overflow: "hidden",
-                        pointerEvents: "auto",
-                        opacity: editingTarget === "header" ? 0.25 : 1,
-                        zIndex: 6,
-                    }}
-                    onPointerDown={(e) => {
-                        if (thumbPreview) return;
-                        if (e.target !== e.currentTarget) return;
-
-                        setSelectedNodeIds([]);
-                        e.stopPropagation();
-                    }}
-                >
-                    {renderNodes && footerNodes.map((n) => (
-                        <NodeView key={n.id} node={n} document={document} />
-                    ))}
-                </div>
-            )}
 
         </div>
     );
