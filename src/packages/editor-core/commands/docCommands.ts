@@ -1,5 +1,18 @@
 import type { DocumentJson, Id, NodeJson, PagePreset, PageJson } from "../schema";
 
+function ensureHFCloneForPreset(doc: DocumentJson, presetId: Id) {
+    const hf = ensureHeaderFooter(doc, presetId);
+
+    // clone header/footer + nodeOrder ให้เป็น ref ใหม่
+    doc.headerFooterByPresetId![presetId] = {
+        header: { ...hf.header, nodeOrder: [...(hf.header.nodeOrder ?? [])] },
+        footer: { ...hf.footer, nodeOrder: [...(hf.footer.nodeOrder ?? [])] },
+    };
+
+    return doc.headerFooterByPresetId![presetId]!;
+}
+
+
 export function setActivePage(session: { activePageId: Id | null }, pageId: Id | null) {
     session.activePageId = pageId;
 }
@@ -12,13 +25,7 @@ export function addNode(doc: DocumentJson, pageId: Id, node: NodeJson) {
     const order = doc.nodeOrderByPageId[pageId] ?? [];
     doc.nodeOrderByPageId[pageId] = [...order, node.id];
 }
-export function addNodeToTarget(
-    doc: DocumentJson,
-    pageId: Id,
-    target: "page" | "header" | "footer",
-    node: NodeJson
-) {
-    // Phase-1: nodes are always stored globally in doc.nodesById
+export function addNodeToTarget(doc: DocumentJson, pageId: Id, target: "page" | "header" | "footer", node: NodeJson) {
     doc.nodesById[node.id] = node;
 
     if (target === "page") {
@@ -30,11 +37,11 @@ export function addNodeToTarget(
     const page = doc.pagesById?.[pageId];
     if (!page) return;
 
-    const hf = ensureHeaderFooter(doc, page.presetId);
+    const hf = ensureHFCloneForPreset(doc, page.presetId);
     const zone = target === "header" ? hf.header : hf.footer;
+
     zone.nodeOrder = [...(zone.nodeOrder ?? []), node.id];
 }
-
 
 export function updateNode(doc: DocumentJson, nodeId: Id, patch: Partial<NodeJson>) {
     // Phase-1: nodes are stored globally in doc.nodesById

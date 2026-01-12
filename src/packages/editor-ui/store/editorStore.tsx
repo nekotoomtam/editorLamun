@@ -32,7 +32,7 @@ type Store = {
 
     // doc actions
     updateNode: (nodeId: Id, patch: Partial<NodeJson>) => void;
-    addNode: (pageId: Id, node: NodeJson) => void;
+    addNode: (pageId: Id, node: NodeJson, target: "page" | "header" | "footer") => void;
 
     // page actions
     addPageToEnd: () => Id;
@@ -71,58 +71,6 @@ const Ctx = createContext<Store | null>(null);
 function uid(prefix: string) {
     return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 }
-
-function cloneDocForUpdateNode(doc: DocumentJson) {
-    return {
-        ...doc,
-        nodesById: { ...doc.nodesById },
-    };
-}
-
-function cloneDocForAddNode(doc: DocumentJson, pageId: Id, target: "page" | "header" | "footer") {
-    // Phase-1: nodes are always global
-    if (target === "page") {
-        const prevOrder = doc.nodeOrderByPageId[pageId] ?? [];
-        return {
-            ...doc,
-            nodesById: { ...doc.nodesById },
-            nodeOrderByPageId: {
-                ...doc.nodeOrderByPageId,
-                [pageId]: [...prevOrder],
-            },
-        };
-    }
-
-    const page = doc.pagesById?.[pageId];
-    const presetId = page?.presetId;
-    if (!presetId) return { ...doc };
-
-    const hfMap = doc.headerFooterByPresetId ?? {};
-    const prevHF = hfMap[presetId];
-
-    const nextHF = prevHF
-        ? {
-            header: {
-                ...prevHF.header,
-                nodeOrder: [...(prevHF.header.nodeOrder ?? [])],
-            },
-            footer: {
-                ...prevHF.footer,
-                nodeOrder: [...(prevHF.footer.nodeOrder ?? [])],
-            },
-        }
-        : undefined;
-
-    return {
-        ...doc,
-        nodesById: { ...doc.nodesById },
-        headerFooterByPresetId: {
-            ...hfMap,
-            ...(nextHF ? { [presetId]: nextHF } : {}),
-        },
-    };
-}
-
 
 export function EditorStoreProvider({
     initialDoc,
@@ -215,6 +163,53 @@ export function EditorStoreProvider({
         };
     }
 
+    function ensureHeaderFooterMut(draft: DocumentJson, presetId: Id) {
+        draft.headerFooterByPresetId ??= {};
+        if (draft.headerFooterByPresetId[presetId]) return;
+
+        draft.headerFooterByPresetId[presetId] = {
+            header: { id: `hf-${presetId}-header`, heightPx: 100, nodeOrder: [] },
+            footer: { id: `hf-${presetId}-footer`, heightPx: 80, nodeOrder: [] },
+        };
+    }
+
+
+    function applyDoc(mut: (draft: DocumentJson) => void) {
+        setDoc(prev => {
+            const next: DocumentJson = {
+                ...prev,
+                pagesById: { ...prev.pagesById },
+                nodesById: { ...prev.nodesById },
+                nodeOrderByPageId: { ...prev.nodeOrderByPageId },
+                pagePresetsById: { ...prev.pagePresetsById },
+                headerFooterByPresetId: prev.headerFooterByPresetId ? { ...prev.headerFooterByPresetId } : prev.headerFooterByPresetId,
+                pageOrder: [...prev.pageOrder],
+                pagePresetOrder: [...prev.pagePresetOrder],
+            };
+
+            mut(next);
+            return next;
+        });
+    }
+
+    function applySession(mut: (s: EditorSession) => EditorSession) {
+        setSession(mut);
+    }
+
+
+    function ensureHFCloneForPreset(draft: DocumentJson, presetId: Id) {
+        ensureHeaderFooterMut(draft, presetId);
+
+        const hfBy = draft.headerFooterByPresetId!;
+        const hf = hfBy[presetId]!;
+
+        hfBy[presetId] = {
+            header: { ...hf.header, nodeOrder: [...(hf.header.nodeOrder ?? [])] },
+            footer: { ...hf.footer, nodeOrder: [...(hf.footer.nodeOrder ?? [])] },
+        };
+
+        return hfBy[presetId]!;
+    }
 
 
     const store = useMemo<Store>(() => {
@@ -234,282 +229,230 @@ export function EditorStoreProvider({
 
             // doc actions
             updateNode: (nodeId, patch) => {
-                setDoc((prev) => {
-                    const next = cloneDocForUpdateNode(prev);
+                applyDoc(next => {
                     Cmd.updateNode(next, nodeId, patch);
-                    return next;
                 });
             },
 
-            addNode: (pageId, node) => {
-                setDoc((prev) => {
-                    const target = session.editingTarget ?? "page";
-                    const next = cloneDocForAddNode(prev, pageId, target);
-                    Cmd.addNodeToTarget(next, pageId, target, node);
-                    return next;
-                });
+            addNode: (pageId, node, target) => {
+                applyDoc(next => Cmd.addNodeToTarget(next, pageId, target, node));
             },
 
-            // page actions
             addPageToEnd: () => {
                 const newPageId = uid("page");
+                let nextActiveId: Id | null = newPageId;
 
-                setDoc((prev) => {
-                    const lastPageId = prev.pageOrder[prev.pageOrder.length - 1];
-                    const lastPage = lastPageId ? prev.pagesById[lastPageId] : null;
+                applyDoc(draft => {
+                    const lastPageId = draft.pageOrder[draft.pageOrder.length - 1];
+                    const lastPage = lastPageId ? draft.pagesById[lastPageId] : null;
 
                     const presetId =
                         lastPage?.presetId ??
-                        prev.pagePresetOrder[0] ??
-                        Object.keys(prev.pagePresetsById)[0];
+                        draft.pagePresetOrder[0] ??
+                        Object.keys(draft.pagePresetsById)[0];
 
-                    if (!presetId) return prev;
+                    if (!presetId) {
+                        nextActiveId = null;
+                        return;
+                    }
 
-                    const nextPageOrder = [...prev.pageOrder, newPageId];
-
-                    return {
-                        ...prev,
-                        pageOrder: nextPageOrder,
-                        pagesById: {
-                            ...prev.pagesById,
-                            [newPageId]: {
-                                id: newPageId,
-                                presetId,
-                                name: `Page ${nextPageOrder.length}`,
-                                visible: true,
-                                locked: false,
-                            },
-                        },
-                        nodeOrderByPageId: {
-                            ...prev.nodeOrderByPageId,
-                            [newPageId]: [],
-                        },
+                    draft.pageOrder = [...draft.pageOrder, newPageId];
+                    draft.pagesById[newPageId] = {
+                        id: newPageId,
+                        presetId,
+                        name: `Page ${draft.pageOrder.length}`,
+                        visible: true,
+                        locked: false,
                     };
+                    draft.nodeOrderByPageId[newPageId] = [];
                 });
 
-                setSession((s) => ({ ...s, activePageId: newPageId }));
+                if (nextActiveId) applySession(s => ({ ...s, activePageId: nextActiveId }));
                 return newPageId;
             },
-
 
             insertPageAfter: (afterPageId: Id) => {
                 const newPageId = uid("page");
-                setDoc(prev => {
-                    const after = prev.pagesById[afterPageId];
-                    if (!after) return prev;
-                    const idx = prev.pageOrder.indexOf(afterPageId);
-                    if (idx < 0) return prev;
+                let ok = true;
 
-                    const nextPageOrder = [
-                        ...prev.pageOrder.slice(0, idx + 1),
+                applyDoc(draft => {
+                    const after = draft.pagesById[afterPageId];
+                    if (!after) { ok = false; return; }
+
+                    const idx = draft.pageOrder.indexOf(afterPageId);
+                    if (idx < 0) { ok = false; return; }
+
+                    draft.pageOrder = [
+                        ...draft.pageOrder.slice(0, idx + 1),
                         newPageId,
-                        ...prev.pageOrder.slice(idx + 1),
+                        ...draft.pageOrder.slice(idx + 1),
                     ];
 
-                    return {
-                        ...prev,
-                        pageOrder: nextPageOrder,
-                        pagesById: {
-                            ...prev.pagesById,
-                            [newPageId]: { id: newPageId, presetId: after.presetId, name: undefined, visible: true, locked: false },
-                        },
-                        nodeOrderByPageId: { ...prev.nodeOrderByPageId, [newPageId]: [] },
+                    draft.pagesById[newPageId] = {
+                        id: newPageId,
+                        presetId: after.presetId,
+                        name: undefined,
+                        visible: true,
+                        locked: false,
                     };
+
+                    draft.nodeOrderByPageId[newPageId] = [];
                 });
 
-                setSession(s => ({ ...s, activePageId: newPageId }));
+                if (ok) applySession(s => ({ ...s, activePageId: newPageId }));
                 return newPageId;
             },
 
-            deletePage: (pageId: Id) => {
-                if (!pageId) return;
-
-                let didDelete = false;
-                let deletedNodeIds: Id[] = [];
+            deletePage: (pageId) => {
                 let nextOrder: Id[] = [];
+                let deletedNodeIds: Id[] = [];
+                let idxBeforeDelete = -1;
 
-                setDoc((prev) => {
-                    const order = prev.pageOrder ?? [];
-                    if (order.length <= 1) return prev;
+                applyDoc(draft => {
+                    idxBeforeDelete = draft.pageOrder.indexOf(pageId);
+                    if (idxBeforeDelete < 0) return; // page not found => no-op
 
-                    const idx = order.indexOf(pageId);
-                    if (idx < 0) return prev;
-                    if (!prev.pagesById[pageId]) return prev;
+                    // 1) collect nodes on that page
+                    const order = draft.nodeOrderByPageId?.[pageId] ?? [];
+                    deletedNodeIds = [...order];
 
-                    nextOrder = order.filter((id) => id !== pageId);
+                    // 2) remove from structures
+                    nextOrder = draft.pageOrder.filter(id => id !== pageId);
+                    draft.pageOrder = nextOrder;
 
-                    const pagesById = { ...prev.pagesById };
-                    delete pagesById[pageId];
+                    // remove page
+                    delete draft.pagesById[pageId];
 
-                    deletedNodeIds = prev.nodeOrderByPageId[pageId] ?? [];
+                    // remove nodeOrder list for page
+                    delete draft.nodeOrderByPageId[pageId];
 
-                    const nodeOrderByPageId = { ...prev.nodeOrderByPageId };
-                    delete nodeOrderByPageId[pageId];
-
-                    let nodesById = prev.nodesById;
-                    if (deletedNodeIds.length) {
-                        nodesById = { ...prev.nodesById };
-                        for (const nid of deletedNodeIds) delete nodesById[nid];
+                    // remove nodes (phase-1: nodes are global, so delete them)
+                    for (const nid of deletedNodeIds) {
+                        delete draft.nodesById[nid];
                     }
-
-                    didDelete = true;
-
-                    return { ...prev, pageOrder: nextOrder, pagesById, nodeOrderByPageId, nodesById };
                 });
 
-                if (!didDelete) return;
+                // if no change happened
+                if (idxBeforeDelete < 0) return;
 
-                setSession((s) => {
+                applySession(s => {
                     const isDeletingActive = s.activePageId === pageId;
 
-                    // ลบ active: ไปก่อนหน้าเป็นหลัก
-                    let nextActiveId = s.activePageId;
-                    if (isDeletingActive) {
-                        const idx = (doc.pageOrder ?? []).indexOf(pageId); // ถ้าจะชัวร์สุด เก็บ order ไว้ใน setDoc เหมือน nextOrder
-                        const prevId = (doc.pageOrder ?? [])[idx - 1] ?? null;
-                        nextActiveId = prevId ?? nextOrder[0] ?? null;
+                    const nextActiveId = isDeletingActive
+                        ? (nextOrder[idxBeforeDelete - 1] ?? nextOrder[idxBeforeDelete] ?? nextOrder[0] ?? null)
+                        : s.activePageId;
 
-                        return { ...s, activePageId: nextActiveId, selectedNodeIds: [], hoverNodeId: null };
-                    }
-
-                    // ลบ non-active: filter selection เฉพาะ node ที่หายไป
-                    const filtered = s.selectedNodeIds.filter((id) => !deletedNodeIds.includes(id));
-                    const hover = s.hoverNodeId && deletedNodeIds.includes(s.hoverNodeId) ? null : s.hoverNodeId;
-                    return { ...s, selectedNodeIds: filtered, hoverNodeId: hover };
+                    return {
+                        ...s,
+                        activePageId: nextActiveId,
+                        selectedNodeIds: s.selectedNodeIds.filter(id => !deletedNodeIds.includes(id)),
+                        hoverNodeId: s.hoverNodeId && deletedNodeIds.includes(s.hoverNodeId) ? null : s.hoverNodeId,
+                    };
                 });
             },
 
 
             setPagePreset: (pageId, presetId) => {
-                setDoc(prev => {
-                    const page = prev.pagesById[pageId];
-                    if (!page) return prev;
-                    return {
-                        ...prev,
-                        pagesById: {
-                            ...prev.pagesById,
-                            [pageId]: { ...page, presetId },
-                        },
-                    };
+                applyDoc(draft => {
+                    const page = draft.pagesById[pageId];
+                    if (!page) return;
+
+                    ensureHeaderFooterMut(draft, presetId);
+                    draft.pagesById[pageId] = { ...page, presetId };
                 });
             },
+
 
 
             updatePresetSize: (presetId, patch) => {
-                setDoc(prev => ({
-                    ...prev,
-                    pagePresetsById: {
-                        ...prev.pagePresetsById,
-                        [presetId]: {
-                            ...prev.pagePresetsById[presetId],
-                            size: { ...prev.pagePresetsById[presetId].size, ...patch },
-                            source: prev.pagePresetsById[presetId].source ?? "custom",
-                        },
-                    },
-                }));
-            },
+                applyDoc(draft => {
+                    const p = draft.pagePresetsById[presetId];
+                    if (!p || p.locked) return;
 
-            setPageMarginSource: (pageId, source) => {
-                setDoc(prev => {
-                    const page = prev.pagesById[pageId];
-                    if (!page) return prev;
-
-                    const preset = prev.pagePresetsById[page.presetId];
-                    if (!preset) return prev;
-
-                    const nextPage: PageJson =
-                        source === "page"
-                            ? {
-                                ...page,
-                                marginSource: "page",
-                                pageMargin: page.pageMargin ?? { ...preset.margin },
-                            }
-                            : {
-                                ...page,
-                                marginSource: "preset",
-                            };
-
-                    return {
-                        ...prev,
-                        pagesById: {
-                            ...prev.pagesById,
-                            [pageId]: nextPage,
-                        },
+                    draft.pagePresetsById[presetId] = {
+                        ...p,
+                        size: { ...p.size, ...patch },
+                        source: p.source ?? "custom",
                     };
                 });
             },
+
+            setPageMarginSource: (pageId, source) => {
+                applyDoc(draft => {
+                    const page = draft.pagesById[pageId];
+                    if (!page) return;
+
+                    const preset = draft.pagePresetsById[page.presetId];
+                    if (!preset) return;
+
+                    if (source === "page") {
+                        draft.pagesById[pageId] = {
+                            ...page,
+                            marginSource: "page",
+                            pageMargin: page.pageMargin ?? { ...preset.margin },
+                        };
+                    } else {
+                        draft.pagesById[pageId] = {
+                            ...page,
+                            marginSource: "preset",
+                            // จะล้าง pageMargin ทิ้งก็ได้ ถ้าต้องการลด state
+                            // pageMargin: undefined,
+                        };
+                    }
+                });
+            },
+
             updatePageMargin: (pageId, patch) => {
-                setDoc(prev => {
-                    const page = prev.pagesById[pageId];
-                    if (!page) return prev;
+                applyDoc(draft => {
+                    const page = draft.pagesById[pageId];
+                    if (!page) return;
 
                     const base =
                         page.pageMargin ??
-                        prev.pagePresetsById[page.presetId]?.margin ??
+                        draft.pagePresetsById[page.presetId]?.margin ??
                         { top: 0, right: 0, bottom: 0, left: 0 };
 
-                    const nextPage: PageJson = {
+                    draft.pagesById[pageId] = {
                         ...page,
                         marginSource: (page.marginSource ?? "page"),
                         pageMargin: { ...base, ...patch },
-                    };
-
-                    return {
-                        ...prev,
-                        pagesById: {
-                            ...prev.pagesById,
-                            [pageId]: nextPage,
-                        },
                     };
                 });
             },
 
             updatePresetMargin: (presetId, patch) => {
-                setDoc(prev => {
-                    const p = prev.pagePresetsById[presetId];
-                    if (!p) return prev;
+                applyDoc(draft => {
+                    const p = draft.pagePresetsById[presetId];
+                    if (!p || p.locked) return;
 
-                    // ถ้าจะกัน locked ซ้ำก็ใส่ได้
-                    if (p.locked) return prev;
-
-                    return {
-                        ...prev,
-                        pagePresetsById: {
-                            ...prev.pagePresetsById,
-                            [presetId]: {
-                                ...p,
-                                margin: { ...p.margin, ...patch },
-                                source: p.source ?? "custom",
-                            },
-                        },
+                    draft.pagePresetsById[presetId] = {
+                        ...p,
+                        margin: { ...p.margin, ...patch },
+                        source: p.source ?? "custom",
                     };
                 });
             },
 
-
             setPresetOrientation: (presetId, mode) => {
-                setDoc(prev => ({
-                    ...prev,
-                    pagePresetsById: {
-                        ...prev.pagePresetsById,
-                        [presetId]: normalizePresetOrientation(prev.pagePresetsById[presetId], mode),
-                    },
-                }));
+                applyDoc(draft => {
+                    const p = draft.pagePresetsById[presetId];
+                    if (!p || p.locked) return;
+
+                    draft.pagePresetsById[presetId] = normalizePresetOrientation(p, mode);
+                });
             },
+
             createPagePreset: (draft, opts) => {
                 const bootstrap = !!opts?.bootstrap;
-
+                const presetId = uid("preset");
                 let createdPageId: Id | null = null;
 
-                setDoc((prev) => {
-                    const presetId = uid("preset");
-
+                applyDoc(doc => {
+                    // 1) add preset
                     const baseSize = PAPER_SIZES[draft.paperKey] ?? PAPER_SIZES.A4;
-
-                    const size =
-                        draft.orientation === "portrait"
-                            ? { width: baseSize.w, height: baseSize.h }
-                            : { width: baseSize.h, height: baseSize.w };
+                    const size = draft.orientation === "portrait"
+                        ? { width: baseSize.w, height: baseSize.h }
+                        : { width: baseSize.h, height: baseSize.w };
 
                     const base: PagePreset = {
                         id: presetId,
@@ -520,62 +463,30 @@ export function EditorStoreProvider({
                         locked: false,
                     };
 
-                    const oriented = normalizePresetOrientation(base, draft.orientation);
+                    doc.pagePresetsById[presetId] = normalizePresetOrientation(base, draft.orientation);
+                    if (!doc.pagePresetOrder.includes(presetId)) doc.pagePresetOrder.push(presetId);
 
-                    const next: DocumentJson = {
-                        ...prev,
-                        pagePresetOrder: prev.pagePresetOrder.includes(presetId)
-                            ? prev.pagePresetOrder
-                            : [...prev.pagePresetOrder, presetId],
-                        pagePresetsById: {
-                            ...prev.pagePresetsById,
-                            [presetId]: oriented,
-                        },
-                    };
-                    const nextWithHF = ensureHeaderFooter(next, presetId);
+                    // 2) ensure HF
+                    ensureHeaderFooterMut(doc, presetId);
 
-                    if (bootstrap && next.pageOrder.length === 0) {
+                    // 3) optionally bootstrap first page
+                    if (bootstrap && doc.pageOrder.length === 0) {
                         createdPageId = uid("page");
-
-                        return {
-                            ...nextWithHF,
-                            pageOrder: [createdPageId],
-                            pagesById: {
-                                ...nextWithHF.pagesById,
-                                [createdPageId]: {
-                                    id: createdPageId,
-                                    presetId,
-                                    name: "Page 1",
-                                    visible: true,
-                                    locked: false,
-                                },
-                            },
-                            nodeOrderByPageId: {
-                                ...nextWithHF.nodeOrderByPageId,
-                                [createdPageId]: [],
-                            },
-                        };
+                        doc.pageOrder.push(createdPageId);
+                        doc.pagesById[createdPageId] = { id: createdPageId, presetId, name: "Page 1", visible: true, locked: false };
+                        doc.nodeOrderByPageId[createdPageId] = [];
                     }
-
-                    return nextWithHF;
-
                 });
 
-                if (createdPageId) {
-                    setSession((s) => ({ ...s, activePageId: createdPageId }));
-                }
-
+                if (createdPageId) applySession(s => ({ ...s, activePageId: createdPageId }));
                 return createdPageId;
             },
 
 
             updatePreset: (presetId, patch) => {
-                setDoc((prev) => {
-                    const p = prev.pagePresetsById[presetId];
-                    if (!p) return prev;
-
-                    // locked กันแก้ (เหมือนที่ modal disable แต่กันอีกชั้น)
-                    if (p.locked) return prev;
+                applyDoc(draft => {
+                    const p = draft.pagePresetsById[presetId];
+                    if (!p || p.locked) return;
 
                     let nextP: PagePreset = { ...p };
 
@@ -589,62 +500,40 @@ export function EditorStoreProvider({
                         nextP.source = nextP.source ?? "custom";
                     }
 
-                    // orientation: normalize (สลับ width/height ให้ถูก)
                     if (patch.orientation) {
                         nextP = normalizePresetOrientation(nextP, patch.orientation);
                     }
 
-                    return {
-                        ...prev,
-                        pagePresetsById: {
-                            ...prev.pagePresetsById,
-                            [presetId]: nextP,
-                        },
-                    };
+                    draft.pagePresetsById[presetId] = nextP;
                 });
             },
-
             deletePresetAndReassignPages: (presetId, opts) => {
                 const map = opts.reassignMap || {};
 
-                setDoc((prev) => {
-                    const pagesById = { ...prev.pagesById };
-
-                    // 1) reassign pages (immutable per page)
+                applyDoc(draft => {
+                    // 1) reassign pages
                     for (const [pageId, nextPresetId] of Object.entries(map) as Array<[Id, Id]>) {
-                        const page = pagesById[pageId];
+                        const page = draft.pagesById[pageId];
                         if (!page) continue;
                         if (page.presetId !== presetId) continue;
 
-                        pagesById[pageId] = { ...page, presetId: nextPresetId };
+                        ensureHeaderFooterMut(draft, nextPresetId);
+                        draft.pagesById[pageId] = { ...page, presetId: nextPresetId };
                     }
 
                     // 2) delete preset
-                    const pagePresetsById = { ...prev.pagePresetsById };
-                    delete pagePresetsById[presetId];
+                    delete draft.pagePresetsById[presetId];
+                    draft.pagePresetOrder = draft.pagePresetOrder.filter(id => id !== presetId);
 
-                    const pagePresetOrder = prev.pagePresetOrder.filter((id) => id !== presetId);
-
-                    return {
-                        ...prev,
-                        pagesById,
-                        pagePresetsById,
-                        pagePresetOrder,
-                    };
+                    // 3) (optional) delete HF of removed preset
+                    if (draft.headerFooterByPresetId) {
+                        delete draft.headerFooterByPresetId[presetId];
+                    }
                 });
 
-                // 3) safety: ถ้า active page ยังชี้ preset ที่ถูกลบ -> พยายามใช้ map หรือ fallback
-                setSession((s) => {
-                    const ap = s.activePageId;
-                    if (!ap) return s;
-
-                    const nextPresetId = map[ap]; // ถ้า active page อยู่ใน map จะได้ตัวนี้
-                    if (nextPresetId) return s;   // preset ของ page จะถูกเปลี่ยนแล้ว ไม่ต้องยุ่ง
-
-                    return s;
-                });
+                // 4) session safety (ของมึงใช้ได้อยู่)
+                setSession(s => s);
             },
-
 
             setEditingTarget: (t) =>
                 setSession((s) => ({
@@ -656,99 +545,41 @@ export function EditorStoreProvider({
 
             getNodesByTarget: (pageId, target) => Sel.getNodesByTarget(doc, pageId, target),
             setPresetHeaderHeightPx: (presetId, heightPx) => {
-                setDoc((prev) => {
-                    let next = ensureHeaderFooter(prev, presetId);
-                    const hf = next.headerFooterByPresetId?.[presetId];
-                    if (!hf) return next;
-
-                    return {
-                        ...next,
-                        headerFooterByPresetId: {
-                            ...(next.headerFooterByPresetId ?? {}),
-                            [presetId]: {
-                                ...hf,
-                                header: {
-                                    ...hf.header,
-                                    heightPx,
-                                },
-                            },
-                        },
-                    };
+                applyDoc(draft => {
+                    const hf = ensureHFCloneForPreset(draft, presetId);
+                    hf.header.heightPx = heightPx;
                 });
             },
 
             setPresetFooterHeightPx: (presetId, heightPx) => {
-                setDoc((prev) => {
-                    let next = ensureHeaderFooter(prev, presetId);
-                    const hf = next.headerFooterByPresetId?.[presetId];
-                    if (!hf) return next;
-
-                    return {
-                        ...next,
-                        headerFooterByPresetId: {
-                            ...(next.headerFooterByPresetId ?? {}),
-                            [presetId]: {
-                                ...hf,
-                                footer: {
-                                    ...hf.footer,
-                                    heightPx,
-                                },
-                            },
-                        },
-                    };
+                applyDoc(draft => {
+                    const hf = ensureHFCloneForPreset(draft, presetId);
+                    hf.footer.heightPx = heightPx;
                 });
             },
 
             setPageHeaderFooterHidden: (pageId, patch) => {
-                setDoc((prev) => {
-                    const p = prev.pagesById?.[pageId];
-                    if (!p) return prev;
+                applyDoc(draft => {
+                    const p = draft.pagesById?.[pageId];
+                    if (!p) return;
 
-                    return {
-                        ...prev,
-                        pagesById: {
-                            ...prev.pagesById,
-                            [pageId]: {
-                                ...p,
-                                ...patch,
-                            },
-                        },
-                    };
+                    draft.pagesById[pageId] = { ...p, ...patch };
                 });
             },
-            updateRepeatAreaHeightPx: (presetId, kind, heightPx) => {
-                setDoc((prev) => {
-                    let next = ensureHeaderFooter(prev, presetId);
-                    const hf = next.headerFooterByPresetId?.[presetId];
-                    if (!hf) return next;
 
+            updateRepeatAreaHeightPx: (presetId, kind, heightPx) => {
+                applyDoc(draft => {
+                    const hf = ensureHFCloneForPreset(draft, presetId);
                     const area = kind === "header" ? hf.header : hf.footer;
 
                     const minH = area.minHeightPx ?? 0;
                     const maxH = area.maxHeightPx ?? Infinity;
-
                     const clamped = Math.max(minH, Math.min(maxH, Math.round(heightPx)));
 
-                    return {
-                        ...next,
-                        headerFooterByPresetId: {
-                            ...(next.headerFooterByPresetId ?? {}),
-                            [presetId]: {
-                                ...hf,
-                                header:
-                                    kind === "header"
-                                        ? { ...hf.header, heightPx: clamped }
-                                        : hf.header,
-                                footer:
-                                    kind === "footer"
-                                        ? { ...hf.footer, heightPx: clamped }
-                                        : hf.footer,
-                            },
-                        },
-                    };
+                    if (kind === "header") hf.header.heightPx = clamped;
+                    else hf.footer.heightPx = clamped;
                 });
             },
-
 
         };
     }, [doc, session]);

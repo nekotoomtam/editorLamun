@@ -60,6 +60,8 @@ export function PageView({
         startFooterH: number;
         scale: number;
         pageH: number;
+        pointerId: number;
+
     }>(null);
 
     const [previewHeaderH, setPreviewHeaderH] = useState<number | null>(null);
@@ -82,6 +84,13 @@ export function PageView({
     const headerH = previewHeaderH ?? hf.headerH;
     const footerH = previewFooterH ?? hf.footerH;
 
+    const hfRef = useRef(hf);
+    useEffect(() => { hfRef.current = hf; }, [hf]);
+
+    const previewHeaderHRef = useRef<number | null>(null);
+    const previewFooterHRef = useRef<number | null>(null);
+    useEffect(() => { previewHeaderHRef.current = previewHeaderH; }, [previewHeaderH]);
+    useEffect(() => { previewFooterHRef.current = previewFooterH; }, [previewFooterH]);
 
     const pageW = preset.size.width;
     const pageH = preset.size.height;
@@ -129,6 +138,7 @@ export function PageView({
         startMargin: PagePreset["margin"];
         pageW: number;
         bodyH: number;
+        pointerId: number;
     }>(null);
 
     function clampHeader(nextHeaderH: number, footerH: number, pageH: number) {
@@ -308,13 +318,6 @@ export function PageView({
         // ✅ 1) handle header/footer resize ก่อน
 
         if (nearHeaderBottom || nearFooterTop) {
-            if (nearHeaderBottom) {
-                if (editingTarget !== "header") return; // ยังไม่ให้ลาก
-            }
-            if (nearFooterTop) {
-                if (editingTarget !== "footer") return;
-            }
-
             (el as any).setPointerCapture?.(e.pointerId);
             hfDragRef.current = {
                 presetId: preset.id,
@@ -324,9 +327,11 @@ export function PageView({
                 startFooterH: footerH,
                 scale,
                 pageH,
+                pointerId: e.pointerId
             };
 
-            setEditingTarget(nearHeaderBottom ? "header" : "footer");
+            const kind = nearHeaderBottom ? "header" : "footer";
+            setEditingTarget(kind);
             setSelectedNodeIds([]);
             e.preventDefault();
             return;
@@ -349,6 +354,7 @@ export function PageView({
             startMargin: baseMargin,
             pageW: preset.size.width,
             bodyH,
+            pointerId: e.pointerId
         };
 
         setDragSide(hoverSide);
@@ -366,11 +372,11 @@ export function PageView({
 
                 if (ctxHF.kind === "header") {
                     const raw = ctxHF.startHeaderH + dy;
-                    const curFooterH = previewFooterH ?? hf.footerH;
+                    const curFooterH = previewFooterHRef.current ?? hfRef.current.footerH;
                     setPreviewHeaderH(clampHeader(raw, curFooterH, ctxHF.pageH));
                 } else {
                     const raw = ctxHF.startFooterH - dy;
-                    const curHeaderH = previewHeaderH ?? hf.headerH;
+                    const curHeaderH = previewHeaderHRef.current ?? hfRef.current.headerH;
                     setPreviewFooterH(clampFooter(raw, curHeaderH, ctxHF.pageH));
                 }
 
@@ -405,12 +411,12 @@ export function PageView({
 
                 if (ctxHF.kind === "header") {
                     const raw = ctxHF.startHeaderH + dy;
-                    const curFooterH = previewFooterH ?? hf.footerH;
+                    const curFooterH = previewFooterHRef.current ?? hfRef.current.footerH;
                     const next = clampHeader(raw, curFooterH, ctxHF.pageH);
                     updateRepeatAreaHeightPx(ctxHF.presetId, "header", roundInt(next));
                 } else {
                     const raw = ctxHF.startFooterH - dy;
-                    const curHeaderH = previewHeaderH ?? hf.headerH;
+                    const curHeaderH = previewHeaderHRef.current ?? hfRef.current.headerH;
                     const next = clampFooter(raw, curHeaderH, ctxHF.pageH);
                     updateRepeatAreaHeightPx(ctxHF.presetId, "footer", roundInt(next));
                 }
@@ -420,7 +426,8 @@ export function PageView({
                 setPreviewHeaderH(null);
                 setPreviewFooterH(null);
 
-                try { wrapRef.current?.releasePointerCapture?.(ev.pointerId); } catch { }
+                try { wrapRef.current?.releasePointerCapture?.(ctxHF.pointerId); } catch { }
+
                 return;
             }
 
@@ -441,11 +448,13 @@ export function PageView({
 
             if (ctx.source === "preset") {
                 updatePresetMargin(ctx.presetId, patch);
-                try { wrapRef.current?.releasePointerCapture?.(ev.pointerId); } catch { }
+                try { wrapRef.current?.releasePointerCapture?.(ctx.pointerId); } catch { }
+
 
             } else {
                 updatePageMargin(ctx.pageId, patch);
-                try { wrapRef.current?.releasePointerCapture?.(ev.pointerId); } catch { }
+                try { wrapRef.current?.releasePointerCapture?.(ctx.pointerId); } catch { }
+
             }
 
             // clear
