@@ -1,12 +1,11 @@
 "use client";
 
 import React, { createContext, useContext, useMemo, useState } from "react";
-import type { DocumentJson, Id, NodeJson, PageJson, PagePreset } from "../../editor-core/schema";
-import { normalizePresetOrientation } from "../../editor-core/schema";
+import type { DocumentJson, Id, NodeJson, PageJson, PagePreset, Margin } from "../../editor-core/schema";
+import { normalizePresetOrientation, createId } from "../../editor-core/schema";
 import type { EditorSession } from "../../editor-core/editorSession";
 import * as Sel from "../../editor-core/schema/selectors";
 import * as Cmd from "../../editor-core/commands/docCommands";
-
 type PaperKey = "A4" | "A3" | "LETTER" | "LEGAL";
 
 const PAPER_SIZES: Record<PaperKey, { w: number; h: number }> = {
@@ -80,7 +79,8 @@ const SessionCtx = createContext<SessionOnlyStore | null>(null);
 const Ctx = createContext<Store | null>(null);
 
 function uid(prefix: string) {
-    return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
+    // Backward compatible wrapper: keep call sites readable.
+    return createId(prefix);
 }
 
 export function EditorStoreProvider({
@@ -130,11 +130,23 @@ export function EditorStoreProvider({
     }
 
     function bootstrapAllPresetHF(d: DocumentJson) {
-        let next = migrateInlineHeaderFooterNodes(d);
-        for (const presetId of next.pagePresetOrder ?? []) {
-            next = ensureHeaderFooter(next, presetId);
+        // Clone once (avoid mutating the incoming initialDoc)
+        const next = migrateInlineHeaderFooterNodes(d);
+        const draft: DocumentJson = {
+            ...next,
+            pagesById: { ...next.pagesById },
+            nodesById: { ...next.nodesById },
+            nodeOrderByPageId: { ...next.nodeOrderByPageId },
+            pagePresetsById: { ...next.pagePresetsById },
+            headerFooterByPresetId: next.headerFooterByPresetId ? { ...next.headerFooterByPresetId } : next.headerFooterByPresetId,
+            pageOrder: [...next.pageOrder],
+            pagePresetOrder: [...next.pagePresetOrder],
+        };
+
+        for (const presetId of draft.pagePresetOrder ?? []) {
+            Cmd.ensureHeaderFooter(draft, presetId);
         }
-        return next;
+        return draft;
     }
 
     const [doc, setDoc] = useState<DocumentJson>(() => bootstrapAllPresetHF(initialDoc));
@@ -150,41 +162,6 @@ export function EditorStoreProvider({
         drag: null,
         resize: null,
     });
-    function ensureHeaderFooter(doc: DocumentJson, presetId: Id) {
-        const hfBy = doc.headerFooterByPresetId ?? {};
-        if (hfBy[presetId]) return doc;
-
-        return {
-            ...doc,
-            headerFooterByPresetId: {
-                ...hfBy,
-                [presetId]: {
-                    header: {
-                        id: `hf-${presetId}-header`,
-                        heightPx: 100,          // ✅ default B
-                        nodeOrder: [],
-                    },
-                    footer: {
-                        id: `hf-${presetId}-footer`,
-                        heightPx: 80,           // ✅ default B
-                        nodeOrder: [],
-                    },
-                },
-            },
-        };
-    }
-
-    function ensureHeaderFooterMut(draft: DocumentJson, presetId: Id) {
-        draft.headerFooterByPresetId ??= {};
-        if (draft.headerFooterByPresetId[presetId]) return;
-
-        draft.headerFooterByPresetId[presetId] = {
-            header: { id: `hf-${presetId}-header`, heightPx: 100, nodeOrder: [] },
-            footer: { id: `hf-${presetId}-footer`, heightPx: 80, nodeOrder: [] },
-        };
-    }
-
-
     function applyDoc(mut: (draft: DocumentJson) => void) {
         setDoc(prev => {
             const next: DocumentJson = {
@@ -206,6 +183,26 @@ export function EditorStoreProvider({
     function applySession(mut: (s: EditorSession) => EditorSession) {
         setSession(mut);
     }
+    type Margin = { top: number; right: number; bottom: number; left: number };
+
+    function cleanMarginPatch(p: Partial<Margin>): Partial<Margin> {
+        const out: Partial<Margin> = {};
+        if (p.top !== undefined) out.top = p.top;
+        if (p.right !== undefined) out.right = p.right;
+        if (p.bottom !== undefined) out.bottom = p.bottom;
+        if (p.left !== undefined) out.left = p.left;
+        return out;
+    }
+
+    function toFullMargin(base: { top: number; right: number; bottom: number; left: number }, p?: Partial<typeof base>) {
+        return {
+            top: p?.top ?? base.top,
+            right: p?.right ?? base.right,
+            bottom: p?.bottom ?? base.bottom,
+            left: p?.left ?? base.left,
+        };
+    }
+
     const sessionStore = useMemo<SessionOnlyStore>(() => {
         return {
             session,
@@ -223,19 +220,7 @@ export function EditorStoreProvider({
     }, [session]);
 
 
-    function ensureHFCloneForPreset(draft: DocumentJson, presetId: Id) {
-        ensureHeaderFooterMut(draft, presetId);
-
-        const hfBy = draft.headerFooterByPresetId!;
-        const hf = hfBy[presetId]!;
-
-        hfBy[presetId] = {
-            header: { ...hf.header, nodeOrder: [...(hf.header.nodeOrder ?? [])] },
-            footer: { ...hf.footer, nodeOrder: [...(hf.footer.nodeOrder ?? [])] },
-        };
-
-        return hfBy[presetId]!;
-    }
+    // Header/Footer ensure + clone is centralized in editor-core commands.
 
 
     const store = useMemo<Store>(() => {
@@ -383,7 +368,7 @@ export function EditorStoreProvider({
                     const page = draft.pagesById[pageId];
                     if (!page) return;
 
-                    ensureHeaderFooterMut(draft, presetId);
+                    Cmd.ensureHeaderFooter(draft, presetId);
                     draft.pagesById[pageId] = { ...page, presetId };
                 });
             },
@@ -408,22 +393,20 @@ export function EditorStoreProvider({
                     const page = draft.pagesById[pageId];
                     if (!page) return;
 
-                    const preset = draft.pagePresetsById[page.presetId];
-                    if (!preset) return;
-
                     if (source === "page") {
-                        draft.pagesById[pageId] = {
-                            ...page,
-                            marginSource: "page",
-                            pageMargin: page.pageMargin ?? { ...preset.margin },
-                        };
+                        // เปิด override: ถ้ายังไม่มี override ให้ bootstrap จาก preset.margin
+                        const preset = draft.pagePresetsById[page.presetId];
+                        if (!preset) return;
+
+                        if (!page.marginOverride) {
+                            Cmd.setPageMarginOverride(draft, pageId, { ...preset.margin });
+                        } else {
+                            // แค่ set source ให้ชัด
+                            draft.pagesById[pageId] = { ...page, marginSource: "page" };
+                        }
                     } else {
-                        draft.pagesById[pageId] = {
-                            ...page,
-                            marginSource: "preset",
-                            // จะล้าง pageMargin ทิ้งก็ได้ ถ้าต้องการลด state
-                            // pageMargin: undefined,
-                        };
+                        // กลับไปใช้ preset: เคลียร์ override ทิ้ง (นี่แหละสำคัญ)
+                        Cmd.setPageMarginOverride(draft, pageId, undefined);
                     }
                 });
             },
@@ -433,31 +416,27 @@ export function EditorStoreProvider({
                     const page = draft.pagesById[pageId];
                     if (!page) return;
 
-                    const base =
-                        page.pageMargin ??
-                        draft.pagePresetsById[page.presetId]?.margin ??
-                        { top: 0, right: 0, bottom: 0, left: 0 };
+                    const preset = draft.pagePresetsById[page.presetId];
+                    if (!preset) return;
 
-                    draft.pagesById[pageId] = {
-                        ...page,
-                        marginSource: (page.marginSource ?? "page"),
-                        pageMargin: { ...base, ...patch },
-                    };
+                    const baseFull = toFullMargin(preset.margin, page.marginOverride as any); // page.marginOverride อาจเป็น partial
+                    const merged = { ...baseFull, ...cleanMarginPatch(patch) };
+
+                    Cmd.setPageMarginOverride(draft, pageId, merged);
                 });
             },
+
 
             updatePresetMargin: (presetId, patch) => {
                 applyDoc(draft => {
                     const p = draft.pagePresetsById[presetId];
                     if (!p || p.locked) return;
 
-                    draft.pagePresetsById[presetId] = {
-                        ...p,
-                        margin: { ...p.margin, ...patch },
-                        source: p.source ?? "custom",
-                    };
+                    const merged = { ...p.margin, ...patch };
+                    Cmd.setPresetMargin(draft, presetId, merged);
                 });
             },
+
 
             setPresetOrientation: (presetId, mode) => {
                 applyDoc(draft => {
@@ -493,7 +472,7 @@ export function EditorStoreProvider({
                     if (!doc.pagePresetOrder.includes(presetId)) doc.pagePresetOrder.push(presetId);
 
                     // 2) ensure HF
-                    ensureHeaderFooterMut(doc, presetId);
+                    Cmd.ensureHeaderFooter(doc, presetId);
 
                     // 3) optionally bootstrap first page
                     if (bootstrap && doc.pageOrder.length === 0) {
@@ -543,7 +522,7 @@ export function EditorStoreProvider({
                         if (!page) continue;
                         if (page.presetId !== presetId) continue;
 
-                        ensureHeaderFooterMut(draft, nextPresetId);
+                        Cmd.ensureHeaderFooter(draft, nextPresetId);
                         draft.pagesById[pageId] = { ...page, presetId: nextPresetId };
                     }
 
@@ -572,14 +551,14 @@ export function EditorStoreProvider({
             getNodesByTarget: (pageId, target) => Sel.getNodesByTarget(doc, pageId, target),
             setPresetHeaderHeightPx: (presetId, heightPx) => {
                 applyDoc(draft => {
-                    const hf = ensureHFCloneForPreset(draft, presetId);
+                    const hf = Cmd.ensureHFCloneForPreset(draft, presetId);
                     hf.header.heightPx = heightPx;
                 });
             },
 
             setPresetFooterHeightPx: (presetId, heightPx) => {
                 applyDoc(draft => {
-                    const hf = ensureHFCloneForPreset(draft, presetId);
+                    const hf = Cmd.ensureHFCloneForPreset(draft, presetId);
                     hf.footer.heightPx = heightPx;
                 });
             },
@@ -595,7 +574,7 @@ export function EditorStoreProvider({
 
             updateRepeatAreaHeightPx: (presetId, kind, heightPx) => {
                 applyDoc(draft => {
-                    const hf = ensureHFCloneForPreset(draft, presetId);
+                    const hf = Cmd.ensureHFCloneForPreset(draft, presetId);
                     const area = kind === "header" ? hf.header : hf.footer;
 
                     const minH = area.minHeightPx ?? 0;

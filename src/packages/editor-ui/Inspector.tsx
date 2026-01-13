@@ -148,15 +148,8 @@ export function Inspector({
     // ✅ NEW: effective margin ตาม source
     const effectiveMargin = useMemo(() => {
         if (!preset || !page) return null;
-
-        if (marginSource === "page" && page.pageMargin) {
-            return page.pageMargin;
-        }
-
-        // fallback เผื่อไฟล์เก่า (ยังมี marginOverride)
-        const base = preset.margin;
-        const ov = page.marginOverride;
-        return ov ? { ...base, ...ov } : base;
+        if (marginSource === "page") return page.marginOverride ?? preset.margin;
+        return preset.margin;
     }, [preset, page, marginSource]);
 
     if (!page || !preset) {
@@ -199,11 +192,11 @@ export function Inspector({
         const v = clampInt(raw, 0, 500);
 
         if (marginSource === "preset") {
-            // preset ถูกล็อก = ห้ามแก้ preset margin
             if (isLocked) return;
-            updatePresetMargin({ [side]: v } as Partial<PagePreset["margin"]>);
+            updatePresetMarginAction(preset.id, { [side]: v } as any);
         } else {
-            updatePageMargin(page.id, { [side]: v } as Partial<PagePreset["margin"]>);
+            const next = { ...(page.marginOverride ?? preset.margin), [side]: v };
+            updatePageMargin(page.id, next); // ให้ store แปลงไป setPageMarginOverride
         }
     };
 

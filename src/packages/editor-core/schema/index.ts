@@ -1,10 +1,37 @@
 export type Id = string;
 export type Unit = "px";
 
+/**
+ * Create a reasonably unique id.
+ * - Prefer crypto.randomUUID when available.
+ * - Fallback to a time + random based id for older runtimes.
+ */
+export function createId(prefix?: string): Id {
+    const cryptoObj = (globalThis as any)?.crypto as Crypto | undefined;
+
+    // IMPORTANT: bind เพื่อไม่ให้เกิด Illegal invocation
+    const randUUID = cryptoObj?.randomUUID
+        ? cryptoObj.randomUUID.bind(cryptoObj)
+        : undefined;
+
+    const base = randUUID
+        ? randUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
+    return prefix ? `${prefix}-${base}` : base;
+}
+
+
 export const DOC_VERSION_LATEST = 1 as const;
 export type DocVersion = number;
 
-export type Margin = PagePreset["margin"];
+export type Margin = {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+};
+export type MarginPatch = Partial<Margin>;
 export type MarginSource = "preset" | "page";
 
 export type RepeatArea = {
@@ -80,7 +107,7 @@ export type PagePreset = {
     id: Id;
     name: string;
     size: { width: number; height: number };
-    margin: { top: number; right: number; bottom: number; left: number };
+    margin: Margin;
     source?: "system" | "custom"
     locked?: boolean;              // ล็อกโครงกระดาษ
     usageHint?: string;            // ข้อความบอกเจตนา
@@ -95,10 +122,9 @@ export type PageJson = {
 
     // NEW: margin source
     marginSource?: "preset" | "page"; // default = "preset"
-    pageMargin?: PagePreset["margin"]; // ใช้เมื่อ marginSource = "page"
 
     // OLD (optional): เก็บไว้ชั่วคราวเพื่อ backward compat
-    marginOverride?: Partial<PagePreset["margin"]> | null;
+    marginOverride?: Margin;
 
     headerHidden?: boolean;
     footerHidden?: boolean;

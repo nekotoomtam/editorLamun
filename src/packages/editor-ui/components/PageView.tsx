@@ -286,8 +286,7 @@ export function PageView({
             (wrapRef.current as any).style.cursor = "default";
         }
 
-        const side = hitTestSide(px, py, baseMargin, pageW, pageH, headerH, footerH);
-
+        const side = hitTestSide(px, py, (previewMargin ?? baseMargin), pageW, pageH, headerH, footerH);
 
         // ถ้า preset locked และ source=preset => hover ได้แต่จะลากไม่ได้ (เพื่อให้รู้ว่ามีเส้น)
         setHoverSide(side);
@@ -781,7 +780,24 @@ export function PageView({
                     )}
                 </>
             )}
+            {renderNodes && (
+                <>
+                    {/* Header nodes */}
+                    {headerNodes.map((n) => (
+                        <NodeView key={n.id} doc={document} node={n} offsetX={0} offsetY={0} />
+                    ))}
 
+                    {/* Page (body) nodes */}
+                    {nodes.map((n) => (
+                        <NodeView key={n.id} doc={document} node={n} offsetX={0} offsetY={headerH} />
+                    ))}
+
+                    {/* Footer nodes */}
+                    {footerNodes.map((n) => (
+                        <NodeView key={n.id} doc={document} node={n} offsetX={0} offsetY={pageH - footerH} />
+                    ))}
+                </>
+            )}
 
 
         </div>

@@ -1,6 +1,7 @@
-import type { DocumentJson, Id, NodeJson, PagePreset, PageJson } from "../schema";
+import type { DocumentJson, Id, NodeJson, PagePreset, PageJson, Margin } from "../schema";
+import { createId } from "../schema";
 
-function ensureHFCloneForPreset(doc: DocumentJson, presetId: Id) {
+export function ensureHFCloneForPreset(doc: DocumentJson, presetId: Id) {
     const hf = ensureHeaderFooter(doc, presetId);
 
     // clone header/footer + nodeOrder ให้เป็น ref ใหม่
@@ -18,29 +19,45 @@ export function setActivePage(session: { activePageId: Id | null }, pageId: Id |
 }
 
 export function addNode(doc: DocumentJson, pageId: Id, node: NodeJson) {
+    // Ensure owner is consistent (defensive)
+    const nextNode: NodeJson = {
+        ...(node as any),
+        owner: { kind: "page", pageId },
+        pageId,
+    };
     // 1) ใส่ node ลง nodesById
-    doc.nodesById[node.id] = node;
+    doc.nodesById[nextNode.id] = nextNode;
 
-    // 2) ใส่ลง order ของ page
-    const order = doc.nodeOrderByPageId[pageId] ?? [];
-    doc.nodeOrderByPageId[pageId] = [...order, node.id];
+    if (!doc.nodeOrderByPageId[pageId]) doc.nodeOrderByPageId[pageId] = [];
+    doc.nodeOrderByPageId[pageId] = [...doc.nodeOrderByPageId[pageId], nextNode.id];
+
 }
-export function addNodeToTarget(doc: DocumentJson, pageId: Id, target: "page" | "header" | "footer", node: NodeJson) {
-    doc.nodesById[node.id] = node;
-
-    if (target === "page") {
-        const order = doc.nodeOrderByPageId[pageId] ?? [];
-        doc.nodeOrderByPageId[pageId] = [...order, node.id];
-        return;
-    }
-
+export function addNodeToTarget(
+    doc: DocumentJson,
+    pageId: Id,
+    target: "page" | "header" | "footer",
+    node: NodeJson
+) {
     const page = doc.pagesById?.[pageId];
     if (!page) return;
 
+    const nextNode: NodeJson =
+        target === "page"
+            ? { ...(node as any), owner: { kind: "page", pageId }, pageId }
+            : { ...(node as any), owner: { kind: target, presetId: page.presetId } as any };
+
+    doc.nodesById[nextNode.id] = nextNode;
+
+    if (target === "page") {
+        if (!doc.nodeOrderByPageId[pageId]) doc.nodeOrderByPageId[pageId] = [];
+        doc.nodeOrderByPageId[pageId] = [...doc.nodeOrderByPageId[pageId], nextNode.id];
+
+        return;
+    }
+
     const hf = ensureHFCloneForPreset(doc, page.presetId);
     const zone = target === "header" ? hf.header : hf.footer;
-
-    zone.nodeOrder = [...(zone.nodeOrder ?? []), node.id];
+    zone.nodeOrder = [...(zone.nodeOrder ?? []), nextNode.id];
 }
 
 export function updateNode(doc: DocumentJson, nodeId: Id, patch: Partial<NodeJson>) {
@@ -62,13 +79,13 @@ export function addPagePreset(
     doc: DocumentJson,
     preset: Omit<PagePreset, "id"> & { id?: Id }
 ): Id {
-    const id = preset.id ?? crypto.randomUUID();
+    const id = preset.id ?? createId("preset");
 
     const p: PagePreset = {
         id,
         name: preset.name,
         size: preset.size,
-        margin: preset.margin ?? DEFAULT_MARGIN,
+        margin: preset.margin ? clampMargin(preset.margin) : { ...DEFAULT_MARGIN },
         source: preset.source ?? "custom",
         locked: preset.locked ?? false,
         usageHint: preset.usageHint,
@@ -87,7 +104,7 @@ export function addPagePreset(
 export function ensureFirstPage(doc: DocumentJson, presetId: Id): Id | null {
     if (doc.pageOrder.length > 0) return null;
 
-    const pageId = crypto.randomUUID();
+    const pageId = createId("page");
     const page: PageJson = {
         id: pageId,
         presetId,
@@ -104,20 +121,22 @@ export function ensureFirstPage(doc: DocumentJson, presetId: Id): Id | null {
     return pageId;
 }
 
-function ensureHeaderFooter(doc: DocumentJson, presetId: Id) {
+export function ensureHeaderFooter(doc: DocumentJson, presetId: Id) {
     if (!doc.headerFooterByPresetId) doc.headerFooterByPresetId = {};
     if (!doc.headerFooterByPresetId[presetId]) {
         doc.headerFooterByPresetId[presetId] = {
             header: {
-                id: `header-${presetId}`,
+                id: `hf-${presetId}-header`,
                 name: "Header",
-                heightPx: 0, // ค่าเริ่มต้น 0 = ยังไม่เปิด (กันเอกสารเก่าพัง)
+                // Default: match current UI expectations.
+                // If you need legacy behavior (0 height), migrate at load time.
+                heightPx: 100,
                 nodeOrder: [],
             },
             footer: {
-                id: `footer-${presetId}`,
+                id: `hf-${presetId}-footer`,
                 name: "Footer",
-                heightPx: 0,
+                heightPx: 80,
                 nodeOrder: [],
             },
         };
@@ -125,3 +144,29 @@ function ensureHeaderFooter(doc: DocumentJson, presetId: Id) {
     return doc.headerFooterByPresetId[presetId];
 }
 
+function clampMargin(m: Margin): Margin {
+    // กันค่าติดลบแบบหยาบ ๆ ก่อน
+    const fix = (n: number) => Math.max(0, Math.round(n));
+    return { top: fix(m.top), right: fix(m.right), bottom: fix(m.bottom), left: fix(m.left) };
+}
+
+// 1) แก้ preset (default)
+export function setPresetMargin(doc: DocumentJson, presetId: Id, margin: Margin) {
+    const preset = doc.pagePresetsById[presetId];
+    if (!preset) return;
+
+    doc.pagePresetsById[presetId] = { ...preset, margin: clampMargin(margin) };
+}
+
+
+// 2) แก้เฉพาะหน้า (override)
+export function setPageMarginOverride(doc: DocumentJson, pageId: Id, marginOverride?: Margin) {
+    const page = doc.pagesById[pageId];
+    if (!page) return;
+
+    if (!marginOverride) {
+        doc.pagesById[pageId] = { ...page, marginSource: "preset", marginOverride: undefined };
+    } else {
+        doc.pagesById[pageId] = { ...page, marginSource: "page", marginOverride: clampMargin(marginOverride) };
+    }
+}

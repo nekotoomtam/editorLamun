@@ -20,30 +20,18 @@ export function getEffectiveMargin(doc: DocumentJson, pageId: Id) {
     if (!preset) return null;
 
     const source = page.marginSource ?? "preset";
-    if (source === "page" && page.pageMargin) return page.pageMargin;
+    if (source === "page" && page.marginOverride) return page.marginOverride;
 
-    const base = preset.margin;
-    const ov = page.marginOverride;
-    return ov ? { ...base, ...ov } : base;
+    return preset.margin;
 }
 
 export function getContentRect(doc: DocumentJson, pageId: Id) {
-    const page = doc.pagesById[pageId];
-    if (!page) return null;
-
-    const preset = doc.pagePresetsById[page.presetId];
-    if (!preset) return null;
-
-    const m = getEffectiveMargin(doc, pageId);
-    if (!m) return null;
-
-    return {
-        x: m.left,
-        y: m.top,
-        w: Math.max(0, preset.size.width - m.left - m.right),
-        h: Math.max(0, preset.size.height - m.top - m.bottom),
-    };
+    const r = getBodyContentRect(doc, pageId);
+    if (!r) return null;
+    const { x, y, w, h } = r;
+    return { x, y, w, h };
 }
+
 
 export function getNodesByTarget(
     doc: DocumentJson,
@@ -90,30 +78,36 @@ export function getEffectiveHeaderFooterHeights(doc: DocumentJson, pageId: Id) {
  * layout = header -> body(margin) -> footer
  */
 export function getBodyContentRect(doc: DocumentJson, pageId: Id) {
+    const m = getEffectivePageMetrics(doc, pageId);
+    if (!m) return null;
+    const { x, y, w, h } = m.bodyRect;
+    return { x, y, w, h, headerH: m.headerH, footerH: m.footerH, pageW: m.pageW, pageH: m.pageH };
+}
+
+
+export function getEffectivePageMetrics(doc: DocumentJson, pageId: Id) {
     const page = doc.pagesById?.[pageId];
     if (!page) return null;
 
     const preset = doc.pagePresetsById?.[page.presetId];
     if (!preset) return null;
 
-    const m = getEffectiveMargin(doc, pageId);
-    if (!m) return null;
+    const margin = getEffectiveMargin(doc, pageId);
+    if (!margin) return null;
 
     const { headerH, footerH } = getEffectiveHeaderFooterHeights(doc, pageId);
 
     const pageW = preset.size.width;
     const pageH = preset.size.height;
-
     const bodyH = Math.max(0, pageH - headerH - footerH);
 
-    return {
-        x: m.left,
-        y: headerH + m.top,
-        w: Math.max(0, pageW - m.left - m.right),
-        h: Math.max(0, bodyH - m.top - m.bottom),
-        headerH,
-        footerH,
-        pageW,
-        pageH,
+    const bodyRect = {
+        x: margin.left,
+        y: headerH + margin.top,
+        w: Math.max(0, pageW - margin.left - margin.right),
+        h: Math.max(0, bodyH - margin.top - margin.bottom),
     };
+
+    return { page, preset, margin, headerH, footerH, pageW, pageH, bodyH, bodyRect };
 }
+

@@ -11,7 +11,17 @@ const fitMap: Record<ImageFit, React.CSSProperties["objectFit"]> = {
     stretch: "fill",
 };
 
-export function NodeView({ node, document }: { node: NodeJson; document: DocumentJson }) {
+export function NodeView({
+    node,
+    doc,
+    offsetX = 0,
+    offsetY = 0,
+}: {
+    node: NodeJson;
+    doc: DocumentJson;
+    offsetX?: number;
+    offsetY?: number;
+}) {
     const { session, setSelectedNodeIds } = useEditorStore();
 
     const selected = (session.selectedNodeIds ?? []).includes(node.id);
@@ -19,10 +29,10 @@ export function NodeView({ node, document }: { node: NodeJson; document: Documen
 
     const base: React.CSSProperties = {
         position: "absolute",
-        left: node.x,
-        top: node.y,
-        width: node.w,
-        height: node.h,
+        left: (node.x ?? 0) + offsetX,
+        top: (node.y ?? 0) + offsetY,
+        width: node.w ?? 0,
+        height: node.h ?? 0,
         boxSizing: "border-box",
         userSelect: "none",
         pointerEvents: locked ? "none" : "auto",
@@ -37,7 +47,6 @@ export function NodeView({ node, document }: { node: NodeJson; document: Documen
 
         const ids = session.selectedNodeIds ?? [];
         if (e.shiftKey) {
-            // toggle
             if (ids.includes(node.id)) setSelectedNodeIds(ids.filter((x) => x !== node.id));
             else setSelectedNodeIds([...ids, node.id]);
             return;
@@ -91,12 +100,11 @@ export function NodeView({ node, document }: { node: NodeJson; document: Documen
     }
 
     if (node.type === "image") {
-        const a = document.assets?.imagesById?.[node.assetId] as AssetImage | undefined;
+        const a = doc.assets?.imagesById?.[node.assetId] as AssetImage | undefined;
         if (!a) return null;
 
         return (
             <div style={{ ...base, ...outline, overflow: "hidden" }} onPointerDown={onPick} title={node.name ?? node.id}>
-
                 <img
                     src={(a as any).src ?? (a as any).url}
                     alt={node.name ?? "image"}
@@ -112,7 +120,6 @@ export function NodeView({ node, document }: { node: NodeJson; document: Documen
         );
     }
 
-    // group/field แบบง่าย ๆ ก่อน
     return (
         <div style={{ ...base, ...outline, background: "rgba(255,255,255,0.35)" }} onPointerDown={onPick} title={node.name ?? node.id}>
             {node.type}
