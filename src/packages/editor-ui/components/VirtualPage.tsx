@@ -25,7 +25,6 @@ function SkeletonGhostLayer({
                 position: "relative",
                 width: pageW,
                 height: pageH,
-                margin: "0 auto",
                 borderRadius: 6,
                 background: "rgba(255,255,255,0.35)",
                 overflow: "hidden",
@@ -83,17 +82,15 @@ function SkeletonGhostLayer({
 
 
 export function VirtualPage(props: {
-
     document: DocumentJson;
     page: PageJson;
     showMargin: boolean;
     active: boolean;
     level: "full" | "skeleton" | "none";
     onActivate?: () => void;
-    registerRef?: (el: HTMLDivElement | null) => void;
     loading?: boolean;
 }) {
-    const { document, page, showMargin, active, level, onActivate, registerRef, loading } = props;
+    const { document, page, showMargin, active, level, onActivate, loading } = props;
 
     const preset = document.pagePresetsById?.[page.presetId] ?? null;
     const pageH = preset?.size?.height ?? 1100;
@@ -101,23 +98,13 @@ export function VirtualPage(props: {
 
     // ✅ none = placeholder กินพื้นที่เท่าหน้าจริง
     if (level === "none") {
-        return (
-            <div
-                ref={(el) => registerRef?.(el)}
-                data-page-id={page.id}
-                style={{ width: pageW, height: pageH, margin: "0 auto" }}
-            />
-        );
+        return <div data-page-id={page.id} style={{ width: pageW, height: pageH }} />;
     }
 
     // ✅ skeleton = โครงหน้า (ตอนนี้ทำเป็นกรอบง่าย ๆ ไปก่อน)
     if (level === "skeleton") {
         return (
-            <div
-                ref={(el) => registerRef?.(el)}
-                data-page-id={page.id}
-                onMouseDown={onActivate}
-            >
+            <div data-page-id={page.id} onMouseDown={onActivate}>
                 <SkeletonGhostLayer
                     document={document}
                     pageId={page.id}
@@ -130,7 +117,7 @@ export function VirtualPage(props: {
 
     // ✅ full = render จริง
     return (
-        <div ref={(el) => registerRef?.(el)} data-page-id={page.id}>
+        <div data-page-id={page.id}>
             <PageView
                 document={document}
                 page={page}

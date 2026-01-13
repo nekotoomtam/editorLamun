@@ -95,14 +95,16 @@ export const CanvasView = forwardRef<CanvasNavigatorHandle, CanvasViewProps>(
                 const pg = pages[i];
                 const h = presetById[pg.presetId]?.size?.height ?? 1100;
 
+                const hz = h * (zoom || 1);
                 offsets.push(acc);
-                heights.push(h);
+                heights.push(hz);
 
-                acc += h;
-                if (i < pages.length - 1) acc += GAP_PX;
+                acc += hz;
+                if (i < pages.length - 1) acc += GAP_PX * (zoom || 1);
             }
             return { offsets, heights };
-        }, [pages, document.pagePresetsById, GAP_PX]);
+        }, [pages, document.pagePresetsById, GAP_PX, zoom]);
+
 
         const isProgrammaticScrollRef = useRef(false);
 
@@ -164,89 +166,125 @@ export const CanvasView = forwardRef<CanvasNavigatorHandle, CanvasViewProps>(
             Math.abs(idx - anchorIndex) <= GAP_RADIUS ||
             (activeIndex >= 0 && Math.abs(idx - activeIndex) <= GAP_RADIUS);
 
-
+        const z = zoom || 1;
         /* ---------- render ---------- */
         if (mode === "scroll") {
             return (
                 <div style={{ padding: 24 }}>
-                    <div
-                        style={{
-                            transform: `scale(${zoom})`,
-                            transformOrigin: "top center",
-                            willChange: "transform",
-                        }}
-                    >
+                    {pages.map((p, idx) => {
+                        const dist = Math.abs(idx - anchorIndex);
+                        const level = getLevel(dist, 2, 8);
 
-                        {pages.map((p, idx) => {
-                            const dist = Math.abs(idx - anchorIndex);
-                            const level = getLevel(dist, 2, 8);
+                        const preset = document.pagePresetsById?.[p.presetId];
+                        const pageW = preset?.size?.width ?? 820;
+                        const pageH = preset?.size?.height ?? 1100;
+                        const z = zoom || 1;
 
-                            return (
-                                <React.Fragment key={p.id}>
-                                    <VirtualPage
-                                        document={document}
-                                        page={p}
-                                        showMargin={showMargin}
-                                        active={p.id === activePageId}
-                                        level={level}
-                                        onActivate={() => {
-                                            if (p.id === activePageId) return;
-
-                                            nav.navigateToPage(p.id, {
-                                                source: "canvas",
-                                                behavior: "auto",
-                                                smoothDistancePages: 5,
-                                            });
+                        return (
+                            <React.Fragment key={p.id}>
+                                <div
+                                    style={{
+                                        width: pageW * z,
+                                        height: pageH * z,
+                                        position: "relative",
+                                        margin: "0 auto", // ให้จัดกลางเหมือนเดิม
+                                    }}
+                                    ref={(el) => registerPageRef(p.id, el)}
+                                >
+                                    <div
+                                        style={{
+                                            transform: `scale(${z})`,
+                                            transformOrigin: "top left",
+                                            width: pageW,
+                                            height: pageH,
                                         }}
-                                        registerRef={(el) => registerPageRef(p.id, el)}
-                                        loading={nodesMock.isLoading(p.id) && p.id === pages[anchorIndex]?.id}
-                                    />
+                                    >
+                                        <VirtualPage
+                                            document={document}
+                                            page={p}
+                                            showMargin={showMargin}
+                                            active={p.id === activePageId}
+                                            level={level}
+                                            onActivate={() => {
+                                                if (p.id === activePageId) return;
+                                                nav.navigateToPage(p.id, { source: "canvas", behavior: "auto", smoothDistancePages: 5 });
+                                            }}
 
-                                    {idx < pages.length - 1 && (
-                                        shouldRenderGap2(idx) ? (
+                                            loading={nodesMock.isLoading(p.id) && p.id === pages[anchorIndex]?.id}
+
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* GAP */}
+                                {idx < pages.length - 1 && (
+                                    shouldRenderGap2(idx) ? (
+                                        <div
+                                            style={{
+                                                width: pageW * z,
+                                                height: GAP_PX * z,      // ✅ layout gap จริง = คูณ z
+                                                margin: "0 auto",
+                                                position: "relative",
+                                            }}
+                                        >
+                                            <div style={{
+                                                transform: `scale(${z})`,
+                                                transformOrigin: "top left",
+                                                width: pageW,
+                                                height: GAP_PX,
+                                            }}>
+                                                <GapAdd
+                                                    width={pageW}
+                                                    scrollRoot={rootEl}
+                                                    armDelayMs={200}
+                                                    onAdd={() => {
+                                                        markManualSelect();
+                                                        const newId = onAddPageAfter?.(p.id);
+                                                        if (!newId) return;
+                                                        pendingNavRef.current = newId;
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div style={{ height: GAP_PX * z }} />
+                                    )
+                                )}
+                            </React.Fragment>
+                        );
+                    })}
+
+                    {pages.length > 0 && (
+                        shouldRenderGap2(pages.length - 1) ? (
+                            (() => {
+                                const last = pages[pages.length - 1];
+                                const preset = document.pagePresetsById?.[last.presetId];
+                                const pageW = preset?.size?.width ?? 820;
+                                return (
+                                    <div style={{ width: pageW * z, height: GAP_PX * z, margin: "0 auto", position: "relative" }}>
+                                        <div style={{ transform: `scale(${z})`, transformOrigin: "top left", width: pageW, height: GAP_PX }}>
                                             <GapAdd
-                                                width={getPageWidth(p.id)}
+                                                width={pageW}
                                                 scrollRoot={rootEl}
                                                 armDelayMs={200}
                                                 onAdd={() => {
                                                     markManualSelect();
-                                                    const newId = onAddPageAfter?.(p.id);
+                                                    const lastId = pages[pages.length - 1].id;
+                                                    const newId = onAddPageAfter?.(lastId);
                                                     if (!newId) return;
-                                                    /* setActivePage(newId); */
+                                                    setActivePage(newId);
+
                                                     pendingNavRef.current = newId;
-                                                }}
-                                            />
-                                        ) : (
-                                            // spacer เบา ๆ แทน (สำคัญ: ไม่ให้ layout ขยับ)
-                                            <div style={{ height: GAP_PX }} />
-                                        )
-                                    )}
-                                </React.Fragment>
-                            );
-                        })}
+                                                }} />
+                                        </div>
+                                    </div>
+                                );
+                            })()
+                        ) : (
+                            <div style={{ height: GAP_PX * z }} />
+                        )
+                    )}
 
-                        {pages.length > 0 && (
-                            shouldRenderGap2(pages.length - 1) ? (
-                                <GapAdd
-                                    width={getPageWidth(pages[pages.length - 1].id)}
-                                    scrollRoot={rootEl}
-                                    armDelayMs={200}
-                                    onAdd={() => {
-                                        markManualSelect();
-                                        const lastId = pages[pages.length - 1].id;
-                                        const newId = onAddPageAfter?.(lastId);
-                                        if (!newId) return;
-                                        setActivePage(newId);
-
-                                        pendingNavRef.current = newId;
-                                    }}
-                                />
-                            ) : (
-                                <div style={{ height: GAP_PX }} />
-                            )
-                        )}
-
-                    </div>
                 </div>
             );
         }
@@ -254,28 +292,30 @@ export const CanvasView = forwardRef<CanvasNavigatorHandle, CanvasViewProps>(
         /* ---------- single page mode ---------- */
         const page = activePageId ? (document.pagesById?.[activePageId] ?? null) : null;
         if (!page) return <div>no page</div>;
+        const preset = document.pagePresetsById?.[page.presetId];
+        const pageW = preset?.size?.width ?? 820;
+        const pageH = preset?.size?.height ?? 1100;
 
         return (
             <div style={{ padding: 24 }}>
-                <div
-                    style={{
-                        transform: `scale(${zoom})`,
-                        transformOrigin: "top center",
-                        willChange: "transform",
-                    }}>
-                    <PageView
-                        document={document}
-                        page={page}
-                        showMargin={showMargin}
-                        active
-                        onActivate={() => {
-                            markManualSelect();
-                            setActivePage(page.id);
+                <div style={{ width: pageW * z, height: pageH * z, margin: "0 auto", position: "relative" }}>
+                    <div style={{ transform: `scale(${z})`, transformOrigin: "top left", width: pageW, height: pageH }}>
+                        <PageView
+                            document={document}
+                            page={page}
+                            showMargin={showMargin}
+                            active
+                            onActivate={() => {
+                                markManualSelect();
+                                setActivePage(page.id);
 
-                        }}
-                    />
+                            }}
+                        />
+                    </div>
                 </div>
             </div>
         );
+
+
     }
 );
