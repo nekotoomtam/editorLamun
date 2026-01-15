@@ -1,7 +1,6 @@
-"use client";
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PageJson } from "../../editor-core/schema";
+import { CANVAS_CONFIG } from "../canvas/canvasConfig";
 
 type Behavior = "jump" | "smooth" | "auto";
 
@@ -61,18 +60,25 @@ export function usePageNavigator({
 }: UsePageNavigatorArgs) {
     // -------- Viewing (viewport) --------
     const [viewportAnchorIndex, setViewportAnchorIndex] = useState(0);
+    // Separate "viewing" index for UX stability (dead-zone / hysteresis)
+    const [viewingIndex, setViewingIndex] = useState(0);
 
-    // Hysteresis tuning
+    // Anchor hysteresis tuning (perf/render window)
     const REF_RATIO = 0.6;
     const ENTER_RATIO = 0.12;
     const ENTER_MIN_PX = 140;
-    const PADDING_PX = 24; // keep in sync with Canvas padding
+
+    // Viewing dead-zone (UX)
+    const VIEW_ANCHOR_TOP = 0.35;
+    const VIEW_ANCHOR_BOTTOM = 0.65;
+    const PADDING_PX = CANVAS_CONFIG.paddingPx; // keep in sync with Canvas padding
 
     // -------- Navigation control (the "coordinator") --------
 
     const [forcedAnchorIndex, setForcedAnchorIndex] = useState<number | null>(null);
     const forcedTargetRef = useRef<number | null>(null);
     const forcedFallbackTimerRef = useRef<number | null>(null);
+    const programmaticCooldownTimerRef = useRef<number | null>(null);
 
     const pageIdToIndex = useMemo(() => {
         const m = new Map<string, number>();
@@ -85,7 +91,9 @@ export function usePageNavigator({
         Math.min(pages.length - 1, forcedAnchorIndex ?? viewportAnchorIndex)
     );
 
-    const viewingPageId = pages[anchorIndex]?.id ?? null;
+    // "Viewing" is intentionally NOT tied to anchorIndex.
+    // anchorIndex may change for perf/virtualization; viewingIndex is stabilized for UI.
+    const viewingPageId = pages[Math.max(0, Math.min(pages.length - 1, viewingIndex))]?.id ?? null;
     const lastReportedViewingRef = useRef<string | null>(null);
 
     const reportViewing = useCallback(
@@ -105,10 +113,35 @@ export function usePageNavigator({
 
         let raf = 0;
 
+        const findIndexAtY = (y: number) => {
+            const n = pageMetrics.offsets.length;
+            if (n === 0) return 0;
+            let lo = 0;
+            let hi = n - 1;
+            let ans = 0;
+            while (lo <= hi) {
+                const mid = (lo + hi) >> 1;
+                if (pageMetrics.offsets[mid] <= y) {
+                    ans = mid;
+                    lo = mid + 1;
+                } else {
+                    hi = mid - 1;
+                }
+            }
+            const top = pageMetrics.offsets[ans];
+            const bottom = top + pageMetrics.heights[ans];
+            if (y > bottom && ans < n - 1) return Math.min(n - 1, ans + 1);
+            return ans;
+        };
+
         const onScroll = () => {
             cancelAnimationFrame(raf);
             raf = requestAnimationFrame(() => {
-                const y = (Math.max(0, rootEl.scrollTop - PADDING_PX) + rootEl.clientHeight * REF_RATIO) / zoom;
+                const scrollTop = Math.max(0, rootEl.scrollTop - PADDING_PX);
+                const clientH = rootEl.clientHeight;
+
+                // 1) Anchor index (perf / render window)
+                const y = (scrollTop + clientH * REF_RATIO) / zoom;
 
                 setViewportAnchorIndex((prev) => {
                     const n = pageMetrics.offsets.length;
@@ -139,6 +172,26 @@ export function usePageNavigator({
 
                     return i;
                 });
+
+                // 2) Viewing index (UX dead-zone)
+                setViewingIndex((prev) => {
+                    const n = pageMetrics.offsets.length;
+                    if (n === 0) return 0;
+
+                    const y1 = (scrollTop + clientH * VIEW_ANCHOR_TOP) / zoom;
+                    const y2 = (scrollTop + clientH * VIEW_ANCHOR_BOTTOM) / zoom;
+
+                    let i = Math.max(0, Math.min(n - 1, prev));
+                    const top = pageMetrics.offsets[i];
+                    const bottom = top + pageMetrics.heights[i];
+
+                    // If current page still covers the dead-zone interval, keep it.
+                    if (y1 >= top && y2 <= bottom) return i;
+
+                    // Otherwise choose index at the center of the interval.
+                    const mid = (y1 + y2) / 2;
+                    return findIndexAtY(mid);
+                });
             });
         };
 
@@ -152,6 +205,17 @@ export function usePageNavigator({
     }, [mode, rootEl, zoom, pageMetrics]);
 
     // -------- 2) When viewportAnchorIndex reaches forced target -> release forced --------
+    const releaseProgrammatic = useCallback((cooldownMs = 120) => {
+        if (programmaticCooldownTimerRef.current) {
+            window.clearTimeout(programmaticCooldownTimerRef.current);
+            programmaticCooldownTimerRef.current = null;
+        }
+        programmaticCooldownTimerRef.current = window.setTimeout(() => {
+            isProgrammaticScrollRef.current = false;
+            programmaticCooldownTimerRef.current = null;
+        }, cooldownMs);
+    }, [isProgrammaticScrollRef]);
+
     useEffect(() => {
         const t = forcedTargetRef.current;
         if (t === null) return;
@@ -160,8 +224,8 @@ export function usePageNavigator({
             forcedTargetRef.current = null;
             setForcedAnchorIndex(null);
 
-            // ✅ clear programmatic lock
-            isProgrammaticScrollRef.current = false;
+            // ✅ clear programmatic lock (with small cooldown to avoid immediate bounce)
+            releaseProgrammatic(120);
 
             if (forcedFallbackTimerRef.current) {
                 window.clearTimeout(forcedFallbackTimerRef.current);
@@ -169,7 +233,7 @@ export function usePageNavigator({
             }
             reportViewing(pages[t]?.id ?? null);
         }
-    }, [viewportAnchorIndex, isProgrammaticScrollRef, pages, reportViewing]);
+    }, [viewportAnchorIndex, pages, reportViewing, releaseProgrammatic]);
 
 
     // -------- 3) Preload around viewing --------
@@ -202,6 +266,10 @@ export function usePageNavigator({
                 window.clearTimeout(forcedFallbackTimerRef.current);
                 forcedFallbackTimerRef.current = null;
             }
+            if (programmaticCooldownTimerRef.current) {
+                window.clearTimeout(programmaticCooldownTimerRef.current);
+                programmaticCooldownTimerRef.current = null;
+            }
         };
     }, []);
 
@@ -214,14 +282,14 @@ export function usePageNavigator({
             setForcedAnchorIndex(null);
 
             // ✅ clear programmatic lock ด้วย กันค้าง
-            isProgrammaticScrollRef.current = false;
+            releaseProgrammatic(120);
 
             if (forcedFallbackTimerRef.current) {
                 window.clearTimeout(forcedFallbackTimerRef.current);
                 forcedFallbackTimerRef.current = null;
             }
         }
-    }, [pages.length, isProgrammaticScrollRef]);
+    }, [pages.length, releaseProgrammatic]);
 
     // -------- 2.5) Release programmatic lock early when we actually arrive --------
     useEffect(() => {
@@ -235,7 +303,7 @@ export function usePageNavigator({
         // Arrived at target: release immediately (no waiting for timeout)
         forcedTargetRef.current = null;
         setForcedAnchorIndex(null);
-        isProgrammaticScrollRef.current = false;
+        releaseProgrammatic(120);
 
         if (forcedFallbackTimerRef.current) {
             window.clearTimeout(forcedFallbackTimerRef.current);
@@ -243,7 +311,7 @@ export function usePageNavigator({
         }
 
         reportViewing(pages[t]?.id ?? null);
-    }, [mode, viewportAnchorIndex, pages, reportViewing, isProgrammaticScrollRef]);
+    }, [mode, viewportAnchorIndex, pages, reportViewing, releaseProgrammatic]);
 
 
 
@@ -293,7 +361,7 @@ export function usePageNavigator({
             if (targetIdx === curAnchor) {
                 forcedTargetRef.current = null;
                 setForcedAnchorIndex(null);
-                isProgrammaticScrollRef.current = false;
+                releaseProgrammatic(120);
                 reportViewing(pageId);
 
                 return;
@@ -315,6 +383,11 @@ export function usePageNavigator({
                 forcedFallbackTimerRef.current = null;
             }
 
+            // lock during programmatic scroll
+            if (programmaticCooldownTimerRef.current) {
+                window.clearTimeout(programmaticCooldownTimerRef.current);
+                programmaticCooldownTimerRef.current = null;
+            }
             isProgrammaticScrollRef.current = true;
 
             requestAnimationFrame(() => {
@@ -323,7 +396,7 @@ export function usePageNavigator({
                 forcedFallbackTimerRef.current = window.setTimeout(() => {
                     forcedTargetRef.current = null;
                     setForcedAnchorIndex(null);
-                    isProgrammaticScrollRef.current = false;
+                    releaseProgrammatic(120);
                     forcedFallbackTimerRef.current = null;
 
                     // ✅ รายงานครั้งเดียวหลังหมดเวลา (กันค้าง/ไม่ปล่อย forced)
@@ -331,7 +404,7 @@ export function usePageNavigator({
                 }, 1200);
 
             });
-        }, [mode, pageIdToIndex, markManualSelect, setActivePageId, scrollToPage, pages, reportViewing]);
+        }, [mode, pageIdToIndex, markManualSelect, setActivePageId, scrollToPage, pages, reportViewing, releaseProgrammatic]);
 
 
 
@@ -340,6 +413,9 @@ export function usePageNavigator({
         viewportAnchorIndex,
         anchorIndex,
         viewingPageId,
+
+        // UX viewing index (debug)
+        viewingIndex,
 
         // forced state (debug)
         forcedAnchorIndex,

@@ -3,6 +3,7 @@ import React from "react";
 import type { DocumentJson, Id, PageJson } from "../../editor-core/schema";
 
 import { PageView } from "../components/PageView";
+import { CANVAS_CONFIG } from "./canvasConfig";
 
 export function SingleCanvas(props: {
     document: DocumentJson;
@@ -22,7 +23,7 @@ export function SingleCanvas(props: {
     const pageH = preset?.size?.height ?? 1100;
 
     return (
-        <div style={{ padding: 24 }}>
+        <div style={{ padding: CANVAS_CONFIG.paddingPx }}>
             <div style={{ width: pageW * zoom, height: pageH * zoom, margin: "0 auto", position: "relative" }}>
                 <div style={{ transform: `scale(${zoom})`, transformOrigin: "top left", width: pageW, height: pageH }}>
                     <PageView
