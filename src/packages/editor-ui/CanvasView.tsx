@@ -47,7 +47,7 @@ export const CanvasView = forwardRef<CanvasNavigatorHandle, CanvasViewProps>(
         const zoom = session.zoom || 1;
 
         const { pages } = usePageList(document);
-        const pageMetrics = usePageMetrics({ document, pages, zoom, gapPx: 36 });
+        const pageMetrics = usePageMetrics({ document, pages, gapPx: 36 });
 
         // Used by single mode to preserve the same "manual select" semantics (for future nav logic).
         const lastManualSelectAtRef = useRef(0);

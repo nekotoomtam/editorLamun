@@ -8,10 +8,16 @@ export function useScrollToPage({
     rootEl,
     pageRefs,
     isProgrammaticScrollRef,
+    getPageTop,
+    zoom = 1,
+    paddingTop = 0,
 }: {
     rootEl: HTMLElement | null;
     pageRefs: React.RefObject<Record<string, HTMLDivElement | null>>;
     isProgrammaticScrollRef: React.RefObject<boolean>;
+    getPageTop?: (pageId: string) => number | null;
+    zoom?: number;
+    paddingTop?: number;
 }) {
     const pendingScrollToRef = useRef<{ pageId: string; behavior: ScrollBehavior } | null>(null);
     const lastManualSelectAtRef = useRef(0);
@@ -45,6 +51,16 @@ export function useScrollToPage({
 
             const el = pageRefs.current[pageId];
             if (!el) {
+                // virtualization-safe: if element is not mounted, fall back to computed top.
+                const top = getPageTop?.(pageId);
+                if (top != null && rootEl) {
+                    isProgrammaticScrollRef.current = true;
+                    const nextTop = Math.max(0, top * zoom + paddingTop - PAGE_SCROLL_TOP_OFFSET);
+                    rootEl.scrollTo({ top: nextTop, behavior });
+                    // unlock after a short moment
+                    window.setTimeout(() => (isProgrammaticScrollRef.current = false), 120);
+                    return;
+                }
                 pendingScrollToRef.current = { pageId, behavior };
                 return;
             }

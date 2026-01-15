@@ -10,10 +10,9 @@ export type PageMetrics = {
 export function usePageMetrics(opts: {
     document: DocumentJson;
     pages: PageJson[];
-    zoom: number;
     gapPx?: number;
 }): PageMetrics {
-    const { document, pages, zoom, gapPx = 36 } = opts;
+    const { document, pages, gapPx = 36 } = opts;
 
     return useMemo(() => {
         const presetById = document.pagePresetsById ?? ({} as any);
@@ -25,14 +24,14 @@ export function usePageMetrics(opts: {
             const pg = pages[i];
             const h = presetById[pg.presetId]?.size?.height ?? 1100;
 
-            const hz = h * zoom;
+            const hz = h;
             offsets.push(acc);
             heights.push(hz);
 
             acc += hz;
-            if (i < pages.length - 1) acc += gapPx * zoom;
+            if (i < pages.length - 1) acc += gapPx;
         }
 
         return { offsets, heights, gapPx };
-    }, [document.pagePresetsById, pages, zoom, gapPx]);
+    }, [document.pagePresetsById, pages, gapPx]);
 }

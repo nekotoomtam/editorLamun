@@ -66,6 +66,7 @@ export function usePageNavigator({
     const REF_RATIO = 0.6;
     const ENTER_RATIO = 0.12;
     const ENTER_MIN_PX = 140;
+    const PADDING_PX = 24; // keep in sync with Canvas padding
 
     // -------- Navigation control (the "coordinator") --------
 
@@ -107,7 +108,7 @@ export function usePageNavigator({
         const onScroll = () => {
             cancelAnimationFrame(raf);
             raf = requestAnimationFrame(() => {
-                const y = (rootEl.scrollTop + rootEl.clientHeight * REF_RATIO) / zoom;
+                const y = (Math.max(0, rootEl.scrollTop - PADDING_PX) + rootEl.clientHeight * REF_RATIO) / zoom;
 
                 setViewportAnchorIndex((prev) => {
                     const n = pageMetrics.offsets.length;

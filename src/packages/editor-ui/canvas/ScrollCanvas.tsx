@@ -45,8 +45,24 @@ export function ScrollCanvas(props: {
     const pendingNavRef = useRef<Id | null>(null);
     const isProgrammaticScrollRef = useRef(false);
 
+
+    const indexById = React.useMemo(() => {
+        const m: Record<string, number> = {};
+        pages.forEach((p, i) => (m[p.id] = i));
+        return m;
+    }, [pages]);
+
+    const getPageTop = React.useCallback(
+        (pageId: string) => {
+            const idx = indexById[pageId];
+            if (idx == null) return null;
+            return pageMetrics.offsets[idx] ?? null;
+        },
+        [indexById, pageMetrics.offsets]
+    );
+
     const { scrollToPage, markManualSelect, registerPageRef, lastManualSelectAtRef } =
-        useScrollToPage({ rootEl, pageRefs, isProgrammaticScrollRef });
+        useScrollToPage({ rootEl, pageRefs, isProgrammaticScrollRef, getPageTop, zoom, paddingTop: 24 });
 
     const nodesMock = usePageNodesMock(document);
 
@@ -83,16 +99,66 @@ export function ScrollCanvas(props: {
         });
     }, [pages, nav.navigateToPage]);
 
-    // index lookup for gap rendering
-    const indexById = React.useMemo(() => {
-        const m: Record<string, number> = {};
-        pages.forEach((p, i) => (m[p.id] = i));
-        return m;
-    }, [pages]);
-
     const anchorIndex = nav.anchorIndex;
     const activeIndex = activePageId ? (indexById[activePageId] ?? -1) : -1;
     const GAP_RADIUS = 1;
+    // -------- Virtualization window (300–500 pages) --------
+    // Render only a slice of pages + spacers to keep DOM light.
+    const PADDING_PX = 24;
+    const OVERSCAN_PAGES = 6; // tune: 4–10
+
+    const findIndexAtY = React.useCallback(
+        (y: number) => {
+            const n = pageMetrics.offsets.length;
+            if (n === 0) return 0;
+            // binary search: greatest i with offsets[i] <= y
+            let lo = 0, hi = n - 1, ans = 0;
+            while (lo <= hi) {
+                const mid = (lo + hi) >> 1;
+                if (pageMetrics.offsets[mid] <= y) {
+                    ans = mid;
+                    lo = mid + 1;
+                } else {
+                    hi = mid - 1;
+                }
+            }
+            // clamp to page bottom
+            const top = pageMetrics.offsets[ans];
+            const bottom = top + pageMetrics.heights[ans];
+            if (y > bottom && ans < n - 1) return Math.min(n - 1, ans + 1);
+            return ans;
+        },
+        [pageMetrics.offsets, pageMetrics.heights]
+    );
+
+    const totalDocHeight =
+        pageMetrics.offsets.length === 0
+            ? 0
+            : pageMetrics.offsets[pageMetrics.offsets.length - 1] +
+            pageMetrics.heights[pageMetrics.heights.length - 1];
+
+    const rootScrollTop = rootEl?.scrollTop ?? 0;
+    const rootClientH = rootEl?.clientHeight ?? 0;
+
+    const yTop = Math.max(0, (rootScrollTop - PADDING_PX) / zoom);
+    const yBottom = Math.max(0, (rootScrollTop + rootClientH - PADDING_PX) / zoom);
+
+    const startVis = findIndexAtY(yTop);
+    const endVis = findIndexAtY(yBottom) + 1;
+
+    let startIdx = Math.max(0, startVis - OVERSCAN_PAGES);
+    let endIdx = Math.min(pages.length, endVis + OVERSCAN_PAGES);
+
+    // keep anchor + active inside window so interactions feel stable
+    startIdx = Math.min(startIdx, Math.max(0, anchorIndex - 10), activeIndex >= 0 ? Math.max(0, activeIndex - 10) : startIdx);
+    endIdx = Math.max(endIdx, Math.min(pages.length, anchorIndex + 11), activeIndex >= 0 ? Math.min(pages.length, activeIndex + 11) : endIdx);
+
+    const topSpacerPx = (pageMetrics.offsets[startIdx] ?? 0) * zoom;
+    const endTop = endIdx < pages.length ? (pageMetrics.offsets[endIdx] ?? totalDocHeight) : totalDocHeight;
+    const bottomSpacerPx = Math.max(0, (totalDocHeight - endTop) * zoom);
+
+    const windowPages = pages.slice(startIdx, endIdx);
+
 
     const shouldRenderGap = (idx: number) =>
         Math.abs(idx - anchorIndex) <= GAP_RADIUS ||
@@ -100,7 +166,9 @@ export function ScrollCanvas(props: {
 
     return (
         <div style={{ padding: 24 }}>
-            {pages.map((p, idx) => {
+            <div style={{ height: topSpacerPx }} />
+            {windowPages.map((p, i) => {
+                const idx = startIdx + i;
                 const dist = Math.abs(idx - anchorIndex);
                 const level = getRenderLevel(dist, 2, 8);
 
@@ -135,7 +203,7 @@ export function ScrollCanvas(props: {
                             />
                         </PageSlot>
 
-                        {idx < pages.length - 1 && (
+                        {idx < pages.length - 1 && idx + 1 < endIdx && (
                             shouldRenderGap(idx) ? (
                                 <GapSlot
                                     width={pageW}
@@ -185,6 +253,7 @@ export function ScrollCanvas(props: {
                     <div style={{ height: pageMetrics.gapPx * zoom }} />
                 )
             )}
+            <div style={{ height: bottomSpacerPx }} />
         </div>
     );
 }
