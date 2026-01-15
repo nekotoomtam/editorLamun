@@ -1,125 +1,161 @@
-Editor Constitution (10 ข้อ)
+# Editor Constitution
 
-1) DocumentJson คือ Source of Truth เดียว
+> เอกสารนี้คือ **กฎสูงสุดของ editor**
+> ทุกการออกแบบ / refactor / เพิ่ม feature ต้อง *ไม่ละเมิด* กฎเหล่านี้
+> ถ้าจำเป็นต้องฝ่าฝืน ต้องมีเหตุผลชัด + ตัดสินใจร่วมกัน
 
-DocumentJson = ความจริงของเอกสาร (structure + content)
+---
 
-ห้ามมี doc สำเนาใน UI/React state (ยกเว้น read-only snapshot สำหรับ export/preview ที่สร้างใหม่จาก doc)
+## A) Source of Truth
 
-2) UI ห้ามถือ “สำเนา doc”
+### A1. DocumentJson คือ Source of Truth เดียว
 
-UI อ่าน doc ผ่าน selector เท่านั้น
+* DocumentJson = ความจริงของเอกสาร (structure + content)
+* UI ห้ามถือสำเนา doc
+* อนุญาตเฉพาะ read-only snapshot ที่สร้างใหม่จาก doc (เช่น export / preview)
 
-ถ้าต้อง cache: cache ได้เฉพาะ “derived” ที่พิสูจน์แล้วว่าไม่เปลี่ยนความหมาย (เช่น metrics cache) และต้อง invalidation ชัด
+### A2. UI อ่าน doc ผ่าน selectors เท่านั้น
 
-3) Derive ทุกอย่างจาก doc + uiState
+* UI ห้ามเข้าถึงโครงสร้าง doc ดิบกระจัดกระจาย
+* cache ได้เฉพาะ **derived state** ที่พิสูจน์แล้วว่าไม่เปลี่ยนความหมาย
+* ทุก cache ต้องมี invalidation rule ชัดเจน
 
-derived state = f(doc, uiState) เท่านั้น
+### A3. Derived state = f(doc, uiState)
 
-ห้าม derived กลายเป็น state ที่แก้เองจนหลุดจาก doc
+* derived state ต้องคำนวณจาก (doc, uiState) เท่านั้น
+* ห้าม derived กลายเป็น state ที่แก้เองจนหลุดจาก doc
 
-4) แก้ doc ต้องผ่านช่องทางเดียว
+---
 
-แก้ได้ผ่าน dispatch(action) หรือ apply(op) เท่านั้น
+## B) Mutation & Determinism
 
-ห้ามแก้ doc แบบ mutating กระจายหลายไฟล์
+### B1. แก้ doc ผ่านช่องทางเดียว
 
-เสริม: “ช่องทางเดียว” ต้อง enforce ได้ (เช่น store เดียว / reducer เดียว)
+* แก้ doc ได้ผ่าน `dispatch(action)` หรือ `apply(op)` เท่านั้น
+* ห้าม mutate doc กระจัดกระจายหลายไฟล์
+* ช่องทางนี้ต้อง enforce ได้ (store / reducer / op pipeline เดียว)
 
-5) ทุกการแก้ต้อง deterministic
+### B2. ทุกการแก้ต้อง deterministic
 
-action/op เดียวกัน + input เดียวกัน → ผลลัพธ์ต้องเหมือนเดิมเสมอ
+* action/op เดียว + input เดียว → ผลลัพธ์ต้องเหมือนเดิมเสมอ
+* ห้ามผูกผลกับ DOM / เวลา / random
+* ถ้าจำเป็นต้องใช้ environment ให้ inject ผ่าน dependency
 
-ห้ามผูกผลกับ DOM/เวลา/สุ่ม (ถ้าจำเป็นต้องมี ให้ inject ผ่าน env)
+### B3. Command / Op ต้อง atomic + reversible
 
-6) Node order คือ z-index (ห้ามมี z แอบ)
+* atomic: ทำครั้งเดียวจบ
+* reversible: undo ได้
+* drag / resize:
 
-nodeOrderByPageId[pageId] = ลำดับทับซ้อน
+  * ระหว่างลาก = ui preview (uiState)
+  * ตอนปล่อย = commit op เดียว
+* op ควรเป็น pure และ serializable
 
-bringToFront/sendToBack = แก้ order เท่านั้น
+---
 
-เสริม: order ต้องเป็น “stable” (ไม่ sort ใหม่เองตาม type/ชื่อ)
+## C) Ordering, Coordinates, UI Separation
 
-7) UI state แยกจาก doc state 100%
+### C1. Node order คือ z-index
 
-UI state: zoom, mode, activePageId, viewingPageId, selection, hover, activeZone(header/body/footer), dragPreview, flags
+* `nodeOrderByPageId[pageId]` = ลำดับทับซ้อน
+* bringToFront / sendToBack = แก้ order เท่านั้น
+* ห้ามมี z-index แอบใน node
+* order ต้อง stable (ห้าม sort ใหม่เองตาม type/ชื่อ)
 
-doc state: pages/presets/nodes/bindings/slots/hidden flags ที่เป็นข้อมูลเอกสารจริง
+### C2. UI state แยกจาก doc state 100%
 
-Rule: UI state reset ได้โดยไม่กระทบเอกสาร
+* UI state เช่น:
 
-8) Coordinate อยู่ unit เดียว (ตอนนี้ = px)
+  * zoom, mode, activePageId, viewingPageId
+  * selection, hover, activeZone (header/body/footer)
+  * dragPreview, transient flags
+* UI state reset ได้โดยไม่กระทบเอกสาร
 
-doc เก็บทุก geometry เป็น px เดียว
+### C3. Coordinate อยู่ unit เดียว
 
-render ห้ามแปลงหน่วยมั่วหลายจุด (ถ้ามี scale/zoom ให้ทำที่ขอบ UI เท่านั้น)
+* ปัจจุบันใช้ **px** เป็น unit เดียวของ doc
+* zoom / scale ทำที่ขอบ UI เท่านั้น
+* snap / grid / guides ต้องคิดใน unit เดียวกันเสมอ
 
-เสริม: snap/grid/guides ต้องคิดใน unit เดียวกันเสมอ
+---
 
-9) Business logic ต้องไม่ผูกกับ DOM
+## D) DOM Independence & Virtualization
 
-layout/metrics สำคัญต้องคำนวณจาก model ได้ แม้หน้ายังไม่ mount
+### D1. Business logic ต้องไม่ผูกกับ DOM
 
-DOM ใช้แค่ interaction (pointer events) และ measurement ที่เลี่ยงไม่ได้ (เช่น text measure) แล้วต้องผ่าน abstraction กลาง
+* layout / metrics สำคัญต้องคำนวณจาก model ได้
+* ต้องคิดได้แม้หน้ายังไม่ mount
+* DOM ใช้เฉพาะ:
 
-เสริม: “measurement service” ต้องเป็น dependency ที่ swap ได้ (mock ได้)
+  * interaction (pointer / keyboard)
+  * measurement ที่เลี่ยงไม่ได้
+* measurement ต้องผ่าน abstraction กลาง (swap / mock ได้)
 
-10) Virtualization เป็น optimization ไม่ใช่ logic
+### D2. Virtualization เป็น optimization ไม่ใช่ logic
 
-ระบบต้อง “คิดได้” แม้หน้าไม่ render
+* ระบบต้องคิดถูกแม้หน้าไม่ render
+* scrollTo / selection ใช้ model + metrics
+* ห้ามพึ่ง element ที่ mount อยู่
 
-scrollTo/selection ใช้ metrics/model ไม่ใช่ใช้ “ของที่ mount อยู่”
+### D3. Scroll / Active ต้อง deterministic
 
-11) Scroll/Active page ต้อง deterministic
+* ต้องมี rule ชัด:
 
-มี rule ชัด:
+  * threshold คืออะไร
+  * tie-break ทำยังไง
+* แยก manual scroll vs programmatic scroll
+* มี cooldown / lock ชั่วคราว
+* ห้ามกระพริบเพราะ observer หลายหน้าชนกัน
 
-threshold คืออะไร
+---
 
-tie-break ทำยังไง
+## E) Architecture Hygiene
 
-แยก manual scroll vs programmatic scroll (cooldown/lock ชั่วคราว)
+### E1. I/O แยกเลเยอร์
 
-ห้ามกระพริบเพราะ observer หลายหน้าแย่งกัน
+* import / export / render (pdf / image) อยู่นอก editor-core
+* editor-core ไม่รู้จัก API / ไฟล์ / DB
+* core ส่งออกเฉพาะ model + intent
 
-12) Command/Op ต้อง atomic + reversible
+### E2. Versioning + Migration ตั้งแต่วันแรก
 
-ทุก action/op:
+* มี `doc.version`
+* มี `migrate(doc)`
+* กฎ: read → migrate → ใช้ latest version เท่านั้น
 
-atomic: ทำครั้งเดียวจบ
+### E3. Invariants + Sanitize
 
-reversible: undo ได้
+* มี `assertDocInvariant(doc)` หรือ `sanitizeDoc(doc)` (dev mode)
+* ตัวอย่าง invariant:
 
-drag/resize:
+  * pageId ใน order ต้องมีจริงใน pagesById
+  * nodeOrder ต้องชี้ node ที่มีจริง
+  * ลบ page ต้อง cleanup nodes / order / selection ให้ครบ
 
-ระหว่างลาก = preview (uiState)
+---
 
-ตอนปล่อย = commit op เดียว
+## F) Additional Laws (เสริม)
 
-เสริม: op ต้อง “pure” (ไม่มี I/O) และ serializable ได้จะดีมาก
+### F1. Stable IDs
 
-13) I/O แยกเลเยอร์
+* pageId / nodeId ห้าม reuse
+* id generation ต้อง deterministic และ unique
 
-import/export/render (pdf/image) อยู่ข้างนอก editor-core
+### F2. No Cross-layer Imports
 
-editor-core ไม่รู้จัก API/ไฟล์/DB
+* UI ห้าม import core ลึกกระจัดกระจาย
+* core export ผ่าน index / barrel เดียว
+* ลด coupling ตอน refactor
 
-core ส่งออก “model + intent” ให้ชั้นนอกไปทำงาน
+---
 
-14) Versioning + migration ตั้งแต่วันแรก
+## Final Rule
 
-doc.version + migrate(doc) ต้องมี แม้ตอนนี้ยัง v1
+> ถ้ากฎข้อใดถูกละเมิด:
+>
+> * ต้องรู้ตัวว่าละเมิด
+> * ต้องอธิบายได้ว่าทำไม
+> * และต้องรู้ผลกระทบระยะยาว
 
-“อ่านแยก → migrate → ใช้ latest เดียว” เป็นกฎ
-
-15) Invariants + sanitize
-
-มี assertDocInvariant(doc) หรือ sanitizeDoc(doc) สำหรับ dev mode
-
-ตัวอย่าง invariant:
-
-pageId ใน order ต้องมีจริงใน pagesById
-
-nodeOrder ต้องชี้ node ที่มีจริง
-
-ลบ page ต้อง cleanup nodes/order/selection ให้หมด
+Editor นี้ถูกออกแบบให้ **โตได้โดยไม่พัง**
+ไม่ใช่แค่ให้ใช้งานได้วันนี้

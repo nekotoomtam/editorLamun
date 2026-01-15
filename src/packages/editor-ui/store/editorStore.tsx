@@ -1,33 +1,22 @@
 "use client";
 
 import React, { createContext, useContext, useMemo, useState } from "react";
-import type { DocumentJson, Id, NodeJson, PageJson, PagePreset, Margin } from "../../editor-core/schema";
+import { produce } from "immer";
+import type { DocumentJson, Id, NodeJson, PageJson, PagePreset } from "../../editor-core/schema";
 import { normalizePresetOrientation, createId } from "../../editor-core/schema";
+import { PAPER_SIZES, type PaperKey } from "./paperSizes";
+import { bootstrapAllPresetHF } from "./editorBootstrap";
+import { cleanMarginPatch, toFullMargin } from "./marginUtils";
 import type { EditorSession } from "../../editor-core/editorSession";
 import * as Sel from "../../editor-core/schema/selectors";
 import * as Cmd from "../../editor-core/commands/docCommands";
-type PaperKey = "A4" | "A3" | "LETTER" | "LEGAL";
-
-const PAPER_SIZES: Record<PaperKey, { w: number; h: number }> = {
-    A4: { w: 820, h: 1160 },
-    A3: { w: 1160, h: 1640 },
-    LETTER: { w: 816, h: 1056 },
-    LEGAL: { w: 816, h: 1344 },
-};
-
-type Store = {
+type DocStore = {
     doc: DocumentJson;
-    session: EditorSession;
 
     // selectors
     getPages: () => ReturnType<typeof Sel.getPages>;
     getPage: (id: Id | null) => ReturnType<typeof Sel.getPage>;
     getPageNodes: (pageId: Id) => ReturnType<typeof Sel.getPageNodes>;
-
-    // session actions
-    setActivePage: (id: Id | null) => void;
-    setZoom: (z: number) => void;
-    setSelectedNodeIds: (ids: Id[]) => void;
 
     // doc actions
     updateNode: (nodeId: Id, patch: Partial<NodeJson>) => void;
@@ -53,7 +42,6 @@ type Store = {
         patch: { name?: string; size?: { width: number; height: number }; orientation?: "portrait" | "landscape" }
     ) => void;
     deletePresetAndReassignPages: (presetId: Id, opts: { reassignMap: Record<Id, Id> }) => void
-    setEditingTarget: (t: "page" | "header" | "footer") => void;
     getNodesByTarget: (
         pageId: Id,
         target: "page" | "header" | "footer"
@@ -75,8 +63,7 @@ type SessionOnlyStore = {
 
 const SessionCtx = createContext<SessionOnlyStore | null>(null);
 
-
-const Ctx = createContext<Store | null>(null);
+const DocCtx = createContext<DocStore | null>(null);
 
 function uid(prefix: string) {
     // Backward compatible wrapper: keep call sites readable.
@@ -90,64 +77,6 @@ export function EditorStoreProvider({
     initialDoc: DocumentJson;
     children: React.ReactNode;
 }) {
-    function migrateInlineHeaderFooterNodes(d: DocumentJson): DocumentJson {
-        const hfBy = d.headerFooterByPresetId;
-        if (!hfBy) return d;
-
-        let changed = false;
-        const nodesById = { ...(d.nodesById ?? {}) };
-        const nextHF: NonNullable<DocumentJson["headerFooterByPresetId"]> = { ...hfBy };
-
-        for (const presetId of Object.keys(nextHF)) {
-            const hf = nextHF[presetId];
-            if (!hf) continue;
-
-            const zones: Array<["header" | "footer", any]> = [
-                ["header", hf.header],
-                ["footer", hf.footer],
-            ];
-
-            for (const [kind, zone] of zones) {
-                const inline = zone?.nodesById;
-                if (!inline || Object.keys(inline).length === 0) continue;
-
-                changed = true;
-                for (const id of Object.keys(inline)) {
-                    const n = inline[id];
-                    if (!n) continue;
-                    // Ensure owner exists (Phase-1)
-                    const owner = (n as any).owner ?? { kind, presetId };
-                    nodesById[id] = { ...(n as any), owner };
-                }
-
-                // Remove inline storage; keep ordering only
-                zone.nodesById = undefined;
-            }
-        }
-
-        if (!changed) return d;
-        return { ...d, nodesById, headerFooterByPresetId: nextHF };
-    }
-
-    function bootstrapAllPresetHF(d: DocumentJson) {
-        // Clone once (avoid mutating the incoming initialDoc)
-        const next = migrateInlineHeaderFooterNodes(d);
-        const draft: DocumentJson = {
-            ...next,
-            pagesById: { ...next.pagesById },
-            nodesById: { ...next.nodesById },
-            nodeOrderByPageId: { ...next.nodeOrderByPageId },
-            pagePresetsById: { ...next.pagePresetsById },
-            headerFooterByPresetId: next.headerFooterByPresetId ? { ...next.headerFooterByPresetId } : next.headerFooterByPresetId,
-            pageOrder: [...next.pageOrder],
-            pagePresetOrder: [...next.pagePresetOrder],
-        };
-
-        for (const presetId of draft.pagePresetOrder ?? []) {
-            Cmd.ensureHeaderFooter(draft, presetId);
-        }
-        return draft;
-    }
 
     const [doc, setDoc] = useState<DocumentJson>(() => bootstrapAllPresetHF(initialDoc));
 
@@ -163,44 +92,15 @@ export function EditorStoreProvider({
         resize: null,
     });
     function applyDoc(mut: (draft: DocumentJson) => void) {
-        setDoc(prev => {
-            const next: DocumentJson = {
-                ...prev,
-                pagesById: { ...prev.pagesById },
-                nodesById: { ...prev.nodesById },
-                nodeOrderByPageId: { ...prev.nodeOrderByPageId },
-                pagePresetsById: { ...prev.pagePresetsById },
-                headerFooterByPresetId: prev.headerFooterByPresetId ? { ...prev.headerFooterByPresetId } : prev.headerFooterByPresetId,
-                pageOrder: [...prev.pageOrder],
-                pagePresetOrder: [...prev.pagePresetOrder],
-            };
-
-            mut(next);
-            return next;
-        });
+        setDoc(prev =>
+            produce(prev, draft => {
+                mut(draft);
+            }),
+        );
     }
 
     function applySession(mut: (s: EditorSession) => EditorSession) {
         setSession(mut);
-    }
-    type Margin = { top: number; right: number; bottom: number; left: number };
-
-    function cleanMarginPatch(p: Partial<Margin>): Partial<Margin> {
-        const out: Partial<Margin> = {};
-        if (p.top !== undefined) out.top = p.top;
-        if (p.right !== undefined) out.right = p.right;
-        if (p.bottom !== undefined) out.bottom = p.bottom;
-        if (p.left !== undefined) out.left = p.left;
-        return out;
-    }
-
-    function toFullMargin(base: { top: number; right: number; bottom: number; left: number }, p?: Partial<typeof base>) {
-        return {
-            top: p?.top ?? base.top,
-            right: p?.right ?? base.right,
-            bottom: p?.bottom ?? base.bottom,
-            left: p?.left ?? base.left,
-        };
     }
 
     const sessionStore = useMemo<SessionOnlyStore>(() => {
@@ -223,20 +123,14 @@ export function EditorStoreProvider({
     // Header/Footer ensure + clone is centralized in editor-core commands.
 
 
-    const store = useMemo<Store>(() => {
+    const docStore = useMemo<DocStore>(() => {
         return {
             doc,
-            session,
 
             // selectors
             getPages: () => Sel.getPages(doc),
             getPage: (id) => Sel.getPage(doc, id),
             getPageNodes: (pageId) => Sel.getPageNodes(doc, pageId),
-
-            // session actions
-            setActivePage: (id) => setSession((s) => ({ ...s, activePageId: id })),
-            setZoom: (z) => setSession((s) => ({ ...s, zoom: z })),
-            setSelectedNodeIds: (ids) => setSession((s) => ({ ...s, selectedNodeIds: ids })),
 
             // doc actions
             updateNode: (nodeId, patch) => {
@@ -540,14 +434,6 @@ export function EditorStoreProvider({
                 setSession(s => s);
             },
 
-            setEditingTarget: (t) =>
-                setSession((s) => ({
-                    ...s,
-                    editingTarget: t,
-                    selectedNodeIds: [],
-                    hoverNodeId: null,
-                })),
-
             getNodesByTarget: (pageId, target) => Sel.getNodesByTarget(doc, pageId, target),
             setPresetHeaderHeightPx: (presetId, heightPx) => {
                 applyDoc(draft => {
@@ -587,20 +473,34 @@ export function EditorStoreProvider({
             },
 
         };
-    }, [doc, session]);
+    }, [doc]);
 
     return (
-        <Ctx.Provider value={store}>
-            <SessionCtx.Provider value={sessionStore}>
-                {children}
-            </SessionCtx.Provider>
-        </Ctx.Provider>
+        <DocCtx.Provider value={docStore}>
+            <SessionCtx.Provider value={sessionStore}>{children}</SessionCtx.Provider>
+        </DocCtx.Provider>
     );
 }
 
 export function useEditorStore() {
-    const v = useContext(Ctx);
-    if (!v) throw new Error("useEditorStore must be used within EditorStoreProvider");
+    const docStore = useContext(DocCtx);
+    const sessionStore = useContext(SessionCtx);
+    if (!docStore || !sessionStore) throw new Error("useEditorStore must be used within EditorStoreProvider");
+
+    // Backward compatible merged shape.
+    // Prefer useEditorDocStore/useEditorSessionStore for finer rerender control.
+    return useMemo(
+        () => ({
+            ...docStore,
+            ...sessionStore,
+        }),
+        [docStore, sessionStore]
+    );
+}
+
+export function useEditorDocStore() {
+    const v = useContext(DocCtx);
+    if (!v) throw new Error("useEditorDocStore must be used within EditorStoreProvider");
     return v;
 }
 export function useEditorSessionStore() {
