@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useMemo, useState } from "react";
-import { produce } from "immer";
+import { applyPatches, enablePatches, produceWithPatches, type Patch } from "immer";
 import type { DocumentJson, Id, NodeJson, PageJson, PagePreset } from "../../editor-core/schema";
 import { normalizePresetOrientation, createId } from "../../editor-core/schema";
 import { PAPER_SIZES, type PaperKey } from "./paperSizes";
@@ -12,6 +12,12 @@ import * as Sel from "../../editor-core/schema/selectors";
 import * as Cmd from "../../editor-core/commands/docCommands";
 type DocStore = {
     doc: DocumentJson;
+
+    // history
+    canUndo: () => boolean;
+    canRedo: () => boolean;
+    undo: () => void;
+    redo: () => void;
 
     // selectors
     getPages: () => ReturnType<typeof Sel.getPages>;
@@ -65,6 +71,17 @@ const SessionCtx = createContext<SessionOnlyStore | null>(null);
 
 const DocCtx = createContext<DocStore | null>(null);
 
+// Enable Immer patches so we can build undo/redo from patches without changing core commands.
+enablePatches();
+
+type DocHistoryEntry = {
+    patches: Patch[];
+    inversePatches: Patch[];
+};
+
+// We use Immer patches to implement doc history (undo/redo) without rewriting all commands.
+enablePatches();
+
 function uid(prefix: string) {
     // Backward compatible wrapper: keep call sites readable.
     return createId(prefix);
@@ -80,6 +97,11 @@ export function EditorStoreProvider({
 
     const [doc, setDoc] = useState<DocumentJson>(() => bootstrapAllPresetHF(initialDoc));
 
+    const [history, setHistory] = useState<{ undo: DocHistoryEntry[]; redo: DocHistoryEntry[] }>(() => ({
+        undo: [],
+        redo: [],
+    }));
+
 
     const [session, setSession] = useState<EditorSession>({
         activePageId: initialDoc.pageOrder[0] ?? null,
@@ -91,12 +113,49 @@ export function EditorStoreProvider({
         drag: null,
         resize: null,
     });
-    function applyDoc(mut: (draft: DocumentJson) => void) {
-        setDoc(prev =>
-            produce(prev, draft => {
+
+    function applyDoc(mut: (draft: DocumentJson) => void, opts?: { recordHistory?: boolean }) {
+        const recordHistory = opts?.recordHistory ?? true;
+
+        setDoc((prev) => {
+            const [next, patches, inversePatches] = produceWithPatches(prev, (draft) => {
                 mut(draft);
-            }),
-        );
+            });
+
+            // Only record meaningful changes.
+            if (recordHistory && patches.length > 0) {
+                setHistory((h) => ({
+                    undo: [...h.undo, { patches, inversePatches }],
+                    // New change invalidates redo.
+                    redo: [],
+                }));
+            }
+            return next as DocumentJson;
+        });
+    }
+
+    function undoDoc() {
+        setHistory((h) => {
+            const last = h.undo[h.undo.length - 1];
+            if (!last) return h;
+            setDoc((prev) => applyPatches(prev, last.inversePatches) as DocumentJson);
+            return {
+                undo: h.undo.slice(0, -1),
+                redo: [...h.redo, last],
+            };
+        });
+    }
+
+    function redoDoc() {
+        setHistory((h) => {
+            const last = h.redo[h.redo.length - 1];
+            if (!last) return h;
+            setDoc((prev) => applyPatches(prev, last.patches) as DocumentJson);
+            return {
+                undo: [...h.undo, last],
+                redo: h.redo.slice(0, -1),
+            };
+        });
     }
 
     function applySession(mut: (s: EditorSession) => EditorSession) {
@@ -126,6 +185,12 @@ export function EditorStoreProvider({
     const docStore = useMemo<DocStore>(() => {
         return {
             doc,
+
+            // history
+            canUndo: () => history.undo.length > 0,
+            canRedo: () => history.redo.length > 0,
+            undo: () => undoDoc(),
+            redo: () => redoDoc(),
 
             // selectors
             getPages: () => Sel.getPages(doc),
@@ -473,7 +538,7 @@ export function EditorStoreProvider({
             },
 
         };
-    }, [doc]);
+    }, [doc, history]);
 
     return (
         <DocCtx.Provider value={docStore}>

@@ -706,7 +706,7 @@ export function AddPresetModal({
                         )}
 
                         {/* edit -> request delete */}
-                        {presetMode === "edit" && !isBootstrap && presetId && (
+                        {/*   {presetMode === "edit" && !isBootstrap && presetId && (
                             <button
                                 style={btnDanger}
                                 onClick={() => onRequestDelete?.(presetId)}
@@ -715,7 +715,7 @@ export function AddPresetModal({
                             >
                                 Delete…
                             </button>
-                        )}
+                        )} */}
                     </div>
 
                     {/* right primary */}

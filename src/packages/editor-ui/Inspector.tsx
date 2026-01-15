@@ -233,7 +233,7 @@ export function Inspector({
                 </div>
             )}
 
-            <CollapsibleSection open={open.page} onToggle={() => toggle("page")} title="Page">
+            {/* <CollapsibleSection open={open.page} onToggle={() => toggle("page")} title="Page">
                 <FieldRow label="Page">
                     <div style={{ fontWeight: 700 }}>{page.name ?? page.id}</div>
                 </FieldRow>
@@ -272,7 +272,7 @@ export function Inspector({
                         + Add preset
                     </button>
                 </div>
-            </CollapsibleSection >
+            </CollapsibleSection > */}
 
             <CollapsibleSection open={open.paper} onToggle={() => toggle("paper")} title="Paper">
                 <FieldRow label="Preset">

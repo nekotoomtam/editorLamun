@@ -18,9 +18,17 @@ function clamp(n: number, min: number, max: number) {
 function ZoomBar({
     zoom,
     setZoom,
+    canUndo,
+    canRedo,
+    undo,
+    redo,
 }: {
     zoom: number;
-    setZoom: (z: number) => void
+    setZoom: (z: number) => void;
+    canUndo: boolean;
+    canRedo: boolean;
+    undo: () => void;
+    redo: () => void;
 }) {
     return (
         <div
@@ -37,6 +45,15 @@ function ZoomBar({
                 fontFamily: "system-ui",
             }}
         >
+            <button onClick={undo} disabled={!canUndo} title="Undo (Ctrl/Cmd+Z)">
+                Undo
+            </button>
+
+            <button onClick={redo} disabled={!canRedo} title="Redo (Ctrl/Cmd+Y / Shift+Ctrl/Cmd+Z)">
+                Redo
+            </button>
+
+            <div style={{ width: 1, height: 22, background: "#e5e7eb", margin: "0 4px" }} />
             <button
                 onClick={() => setZoom(clamp(Number((zoom - 0.1).toFixed(2)), 0.25, 3))}
             >
@@ -74,6 +91,10 @@ export function EditorApp() {
         createPagePreset,
         updatePreset,
         deletePresetAndReassignPages,
+        canUndo,
+        canRedo,
+        undo,
+        redo,
     } = useEditorStore();
 
     const { session, setActivePage, setZoom, setEditingTarget } = useEditorSessionStore();
@@ -98,6 +119,51 @@ export function EditorApp() {
     const [viewingPageId, setViewingPageId] = useState<string | null>(session.activePageId);
 
     const activePresetId = activePageId ? doc.pagesById[activePageId]?.presetId : null;
+
+    // Undo / Redo keyboard shortcuts
+    useEffect(() => {
+        const isTypingTarget = (el: EventTarget | null) => {
+            if (!(el instanceof HTMLElement)) return false;
+            const tag = el.tagName;
+            return (
+                tag === "INPUT" ||
+                tag === "TEXTAREA" ||
+                el.isContentEditable ||
+                // Some custom widgets use role=textbox.
+                el.getAttribute("role") === "textbox"
+            );
+        };
+
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (isTypingTarget(e.target)) return;
+
+            const isMac = navigator.platform.toLowerCase().includes("mac");
+            const mod = isMac ? e.metaKey : e.ctrlKey;
+            if (!mod) return;
+
+            const key = e.key.toLowerCase();
+
+            // Undo: Ctrl/Cmd+Z
+            if (key === "z" && !e.shiftKey) {
+                if (canUndo()) {
+                    e.preventDefault();
+                    undo();
+                }
+                return;
+            }
+
+            // Redo: Ctrl/Cmd+Y OR Ctrl/Cmd+Shift+Z
+            if (key === "y" || (key === "z" && e.shiftKey)) {
+                if (canRedo()) {
+                    e.preventDefault();
+                    redo();
+                }
+            }
+        };
+
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [canRedo, canUndo, redo, undo]);
     useEffect(() => {
         const el = centerRef.current;
         if (!el) return;
@@ -363,7 +429,14 @@ export function EditorApp() {
                 </div>
 
                 <div style={{ position: "absolute", top: 12, right: rightW + 6 + 12, zIndex: 50 }}>
-                    <ZoomBar zoom={zoom} setZoom={setZoom} />
+                    <ZoomBar
+                        zoom={zoom}
+                        setZoom={setZoom}
+                        canUndo={canUndo()}
+                        canRedo={canRedo()}
+                        undo={undo}
+                        redo={redo}
+                    />
                     <LayerBar
                         value={session.editingTarget ?? "page"}
                         onChange={setEditingTarget}
