@@ -129,7 +129,11 @@ export type PageJson = {
     headerHidden?: boolean;
     footerHidden?: boolean;
 };
-
+/**
+ * Position/size อยู่ใน "page-space" เสมอ (origin = มุมซ้ายบนของกระดาษ)
+ * - owner.kind === 'page' | 'header' | 'footer' ใช้พิกัดชุดเดียวกันทั้งหมด
+ * - header/body/footer มีไว้เพื่อ “constraint/clip/targeting” เท่านั้น ห้าม offset พิกัดตอน render
+ */
 export type NodeOwner =
     | { kind: "page"; pageId: Id }
     | { kind: "header"; presetId: Id }

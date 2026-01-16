@@ -9,7 +9,8 @@ import { PagesPanel } from "./PagesPanel";
 import type { CanvasNavigatorHandle } from "./CanvasView";
 import { AddPresetModal } from "./AddPresetModal";
 import type { Id } from "../editor-core/schema";
-
+import { computeLayout } from "../editor-renderer/layout/computeLayout";
+import { exportProofPdf } from "../editor-renderer/pdf/exportProofPdf";
 
 function clamp(n: number, min: number, max: number) {
     return Math.max(min, Math.min(max, n));
@@ -22,6 +23,7 @@ function ZoomBar({
     canRedo,
     undo,
     redo,
+    onExportPdf,
 }: {
     zoom: number;
     setZoom: (z: number) => void;
@@ -29,6 +31,7 @@ function ZoomBar({
     canRedo: boolean;
     undo: () => void;
     redo: () => void;
+    onExportPdf: () => void;
 }) {
     return (
         <div
@@ -71,9 +74,28 @@ function ZoomBar({
             </button>
 
             <button onClick={() => setZoom(1)}>Reset</button>
+            <button onClick={onExportPdf}>
+                Export PDF
+            </button>
         </div>
     );
 }
+function downloadPdf(bytes: Uint8Array, filename = "proof.pdf") {
+    // ตัด slice ให้เป็น ArrayBuffer แท้ ๆ
+    const ab = bytes.buffer.slice(
+        bytes.byteOffset,
+        bytes.byteOffset + bytes.byteLength
+    );
+
+    const blob = new Blob([ab], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
 
 const MIN_LEFT = 260;
 const MAX_LEFT = 420;
@@ -441,6 +463,16 @@ export function EditorApp() {
                         canRedo={canRedo()}
                         undo={undo}
                         redo={redo}
+                        onExportPdf={async () => {
+                            try {
+                                const layout = computeLayout(doc);
+                                const pdfBytes = await exportProofPdf(layout, { debug: true });
+                                downloadPdf(pdfBytes, "proof.pdf");
+                            } catch (err) {
+                                console.error("Export PDF failed", err);
+                                alert("Export PDF failed (ดู console)");
+                            }
+                        }}
                     />
                     <LayerBar
                         value={session.editingTarget ?? "page"}
