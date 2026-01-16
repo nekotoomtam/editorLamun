@@ -169,8 +169,10 @@ export function EditorApp() {
         if (!el) return;
 
         const onWheel = (e: WheelEvent) => {
-            if (!e.ctrlKey) return;
+            if (!(e.ctrlKey || e.metaKey)) return;
+
             e.preventDefault();
+            e.stopPropagation(); // ✅ กัน bubbling ไปโดน handler อื่น
 
             const step = e.deltaY > 0 ? -0.1 : 0.1;
             setZoom(clamp(Number((zoom + step).toFixed(2)), 0.25, 3));
@@ -179,6 +181,7 @@ export function EditorApp() {
         el.addEventListener("wheel", onWheel, { passive: false });
         return () => el.removeEventListener("wheel", onWheel);
     }, [setZoom, zoom]);
+
 
     useEffect(() => {
         setMounted(true);
@@ -388,10 +391,12 @@ export function EditorApp() {
         };
 
         const onWheel = (e: WheelEvent) => {
+            // ✅ ถ้าเป็น gesture ซูม (Ctrl/Cmd + wheel) ให้ปล่อยให้ handler ซูมจัดการ
+            if (e.ctrlKey || e.metaKey) return;
+
             // ปล่อย trackpad ให้ native จัดการ (จะได้ 1:1, inertial ธรรมชาติ)
             if (!isLikelyMouseWheel(e)) return;
 
-            // จับเฉพาะเมาส์ล้อ: หน่วง + สมูด
             e.preventDefault();
 
             // แปลง delta ให้เป็น px แบบคงที่พอประมาณ
