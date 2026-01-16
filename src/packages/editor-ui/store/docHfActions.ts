@@ -31,11 +31,7 @@ export function createDocHfActions(args: { applyDoc: ApplyDoc }) {
     function updateRepeatAreaHeightPx(presetId: Id, kind: "header" | "footer", heightPx: number) {
         applyDoc((draft) => {
             const hf = Cmd.ensureHFCloneForPreset(draft, presetId);
-            const area = kind === "header" ? hf.header : hf.footer;
-
-            const minH = area.minHeightPx ?? 0;
-            const maxH = area.maxHeightPx ?? Infinity;
-            const clamped = Math.max(minH, Math.min(maxH, Math.round(heightPx)));
+            const clamped = Cmd.clampRepeatAreaHeightPxForPreset(draft, presetId, kind, heightPx);
 
             if (kind === "header") hf.header.heightPx = clamped;
             else hf.footer.heightPx = clamped;

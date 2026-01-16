@@ -67,6 +67,9 @@ export function bootstrapAllPresetHF(d: DocumentJson): DocumentJson {
     pagePresetOrder: [...next.pagePresetOrder],
   };
 
+  // Normalize legacy/invalid margin states (e.g. marginSource="page" but missing override).
+  Cmd.normalizeDocMargins(draft);
+
   for (const presetId of draft.pagePresetOrder ?? []) {
     Cmd.ensureHeaderFooter(draft, presetId);
   }

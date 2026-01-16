@@ -1,4 +1,5 @@
 import type { DocumentJson, PageJson, NodeJson, Id } from "./index";
+import { computePageRects } from "../geometry/pageMetrics";
 
 export const getPages = (doc: DocumentJson): PageJson[] =>
     doc.pageOrder.map(id => doc.pagesById[id]).filter(Boolean);
@@ -99,15 +100,15 @@ export function getEffectivePageMetrics(doc: DocumentJson, pageId: Id) {
 
     const pageW = preset.size.width;
     const pageH = preset.size.height;
-    const bodyH = Math.max(0, pageH - headerH - footerH);
 
-    const bodyRect = {
-        x: margin.left,
-        y: headerH + margin.top,
-        w: Math.max(0, pageW - margin.left - margin.right),
-        h: Math.max(0, bodyH - margin.top - margin.bottom),
-    };
+    const rects = computePageRects({
+        pageW,
+        pageH,
+        margin,
+        headerH,
+        footerH,
+    });
 
-    return { page, preset, margin, headerH, footerH, pageW, pageH, bodyH, bodyRect };
+    return { page, preset, margin, headerH, footerH, pageW, pageH, bodyH: rects.bodyH, bodyRect: rects.bodyRect, lines: rects.lines };
 }
 

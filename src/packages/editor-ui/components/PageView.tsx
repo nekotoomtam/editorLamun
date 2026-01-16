@@ -4,7 +4,10 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { DocumentJson, PageJson, PagePreset } from "../../editor-core/schema";
 import { NodeView } from "./NodeView";
 import * as Sel from "../../editor-core/schema/selectors";
+import { computePageRects } from "../../editor-core/geometry/pageMetrics";
+import * as Cmd from "../../editor-core/commands/docCommands";
 import { useEditorStore } from "../store/editorStore"; // ✅ เพิ่ม
+import { clientToPageDelta, clientToPagePoint } from "../utils/coords";
 
 type Side = "top" | "right" | "bottom" | "left";
 
@@ -55,10 +58,9 @@ export function PageView({
     const hfDragRef = useRef<null | {
         presetId: string;
         kind: "header" | "footer";
-        startClientY: number;
+        startPageY: number;
         startHeaderH: number;
         startFooterH: number;
-        scale: number;
         pageH: number;
         pointerId: number;
 
@@ -94,12 +96,7 @@ export function PageView({
 
     const pageW = preset.size.width;
     const pageH = preset.size.height;
-    const bodyH = Math.max(0, pageH - headerH - footerH);
-    const MAX_HEADER_PCT = 0.25;
-    const MAX_FOOTER_PCT = 0.20;
-    const MIN_BODY_H = 120; // หรือ 100 ตามใจตูม
-    const MIN_HEADER_H = 0;
-    const MIN_FOOTER_H = 0;
+    const hfZone = useMemo(() => Sel.getHeaderFooterZone(document, preset.id), [document.headerFooterByPresetId, preset.id]);
 
     // ===== preview + dragging state =====
     const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -111,14 +108,18 @@ export function PageView({
     // ใช้ margin สำหรับ render (ถ้ากำลังลาก ให้ใช้ preview)
     const margin = previewMargin ?? baseMargin;
 
-    // content rect ใช้จาก selector (แต่ตอนลากเราอยากสะท้อน preview ด้วย)
-    const content = useMemo(() => {
-        const x = margin.left;
-        const y = headerH + margin.top;
-        const w = Math.max(0, pageW - margin.left - margin.right);
-        const h = Math.max(0, bodyH - margin.top - margin.bottom);
-        return { x, y, w, h };
-    }, [margin.left, margin.top, margin.right, margin.bottom, headerH, bodyH, pageW]);
+    // rects/page-lines ใช้ single source of truth (รองรับ preview margin/header/footer)
+    const rects = useMemo(() => {
+        return computePageRects({
+            pageW,
+            pageH,
+            margin,
+            headerH,
+            footerH,
+        });
+    }, [pageW, pageH, margin, headerH, footerH]);
+
+    const content = rects.bodyRect;
 
 
     // ===== drag math config =====
@@ -132,9 +133,7 @@ export function PageView({
         presetId: string;
         source: "preset" | "page";
         side: Side;
-        startClientX: number;
-        startClientY: number;
-        scale: number; // client px -> page px
+        startPagePt: { px: number; py: number };
         startMargin: PagePreset["margin"];
         pageW: number;
         bodyH: number;
@@ -142,32 +141,35 @@ export function PageView({
     }>(null);
 
     function clampHeader(nextHeaderH: number, footerH: number, pageH: number) {
-        const maxByPct = pageH * MAX_HEADER_PCT;
-        const maxByBody = pageH - footerH - MIN_BODY_H;
-        const max = Math.min(maxByPct, maxByBody);
-        return clamp(nextHeaderH, MIN_HEADER_H, Math.max(MIN_HEADER_H, max));
+        return Cmd.clampRepeatAreaHeightPx({
+            kind: "header",
+            desiredPx: nextHeaderH,
+            pageH,
+            otherPx: footerH,
+            areaMinPx: hfZone?.header?.minHeightPx,
+            areaMaxPx: hfZone?.header?.maxHeightPx,
+        });
     }
 
     function clampFooter(nextFooterH: number, headerH: number, pageH: number) {
-        const maxByPct = pageH * MAX_FOOTER_PCT;
-        const maxByBody = pageH - headerH - MIN_BODY_H;
-        const max = Math.min(maxByPct, maxByBody);
-        return clamp(nextFooterH, MIN_FOOTER_H, Math.max(MIN_FOOTER_H, max));
+        return Cmd.clampRepeatAreaHeightPx({
+            kind: "footer",
+            desiredPx: nextFooterH,
+            pageH,
+            otherPx: headerH,
+            areaMinPx: hfZone?.footer?.minHeightPx,
+            areaMaxPx: hfZone?.footer?.maxHeightPx,
+        });
     }
 
-    function clientToPageDelta(dxClient: number, dyClient: number, scale: number) {
-        // scale = rect.width / pageW  => pageDelta = clientDelta / scale
-        const s = scale || 1;
-        return { dx: dxClient / s, dy: dyClient / s };
-    }
+    // NOTE: client->page conversion is centralized in editor-ui/utils/coords.ts
 
-    function hitTestSide(px: number, py: number, m: PagePreset["margin"], pageW: number, pageH: number, headerH: number, footerH: number): Side | null {
+    function hitTestSide(px: number, py: number, lines: { marginLeftX: number; marginRightX: number; marginTopY: number; marginBottomY: number }): Side | null {
 
-        // เส้นอยู่ตรงไหน
-        const xL = m.left;
-        const xR = pageW - m.right;
-        const yT = headerH + m.top;
-        const yB = pageH - footerH - m.bottom;
+        const xL = lines.marginLeftX;
+        const xR = lines.marginRightX;
+        const yT = lines.marginTopY;
+        const yB = lines.marginBottomY;
 
         // ใกล้เส้นไหน + อยู่ในช่วงระนาบนั้น
         // (เราให้จับได้ทั้งแนวของเส้น ไม่ต้องอยู่แค่ใน content)
@@ -270,11 +272,7 @@ export function PageView({
 
         const el = wrapRef.current;
         if (!el) return;
-        const rect = el.getBoundingClientRect();
-        const scale = rect.width / preset.size.width;
-
-        const px = (e.clientX - rect.left) / scale;
-        const py = (e.clientY - rect.top) / scale;
+        const { px, py } = clientToPagePoint(el, e.clientX, e.clientY, pageW, pageH);
         const nearHeaderBottom = headerH > 0 && Math.abs(py - headerH) <= HF_HIT;
         const nearFooterTop = footerH > 0 && Math.abs(py - (pageH - footerH)) <= HF_HIT;
 
@@ -286,7 +284,7 @@ export function PageView({
             (wrapRef.current as any).style.cursor = "default";
         }
 
-        const side = hitTestSide(px, py, (previewMargin ?? baseMargin), pageW, pageH, headerH, footerH);
+        const side = hitTestSide(px, py, rects.lines);
 
         // ถ้า preset locked และ source=preset => hover ได้แต่จะลากไม่ได้ (เพื่อให้รู้ว่ามีเส้น)
         setHoverSide(side);
@@ -307,9 +305,7 @@ export function PageView({
         const el = wrapRef.current;
         if (!el) return;
 
-        const rect = el.getBoundingClientRect();
-        const scale = rect.width / preset.size.width;
-        const py = (e.clientY - rect.top) / scale;
+        const { py } = clientToPagePoint(el, e.clientX, e.clientY, pageW, pageH);
 
         const nearHeaderBottom = headerH > 0 && Math.abs(py - headerH) <= HF_HIT;
         const nearFooterTop = footerH > 0 && Math.abs(py - (pageH - footerH)) <= HF_HIT;
@@ -318,13 +314,13 @@ export function PageView({
 
         if (nearHeaderBottom || nearFooterTop) {
             (el as any).setPointerCapture?.(e.pointerId);
+            const pt = clientToPagePoint(el, e.clientX, e.clientY, pageW, pageH);
             hfDragRef.current = {
                 presetId: preset.id,
                 kind: nearHeaderBottom ? "header" : "footer",
-                startClientY: e.clientY,
+                startPageY: pt.py,
                 startHeaderH: headerH,
                 startFooterH: footerH,
-                scale,
                 pageH,
                 pointerId: e.pointerId
             };
@@ -347,12 +343,13 @@ export function PageView({
             presetId: preset.id,
             source,
             side: hoverSide,
-            startClientX: e.clientX,
-            startClientY: e.clientY,
-            scale,
+            startPagePt: (() => {
+                const pt = clientToPagePoint(el, e.clientX, e.clientY, pageW, pageH);
+                return { px: pt.px, py: pt.py };
+            })(),
             startMargin: baseMargin,
             pageW: preset.size.width,
-            bodyH,
+            bodyH: rects.bodyH,
             pointerId: e.pointerId
         };
 
@@ -366,8 +363,10 @@ export function PageView({
             // ✅ 1) header/footer resize first
             const ctxHF = hfDragRef.current;
             if (ctxHF) {
-                const dyClient = ev.clientY - ctxHF.startClientY;
-                const dy = dyClient / (ctxHF.scale || 1);
+                const el = wrapRef.current;
+                if (!el) return;
+                const cur = clientToPagePoint(el, ev.clientX, ev.clientY, pageW, pageH);
+                const dy = cur.py - ctxHF.startPageY;
 
                 if (ctxHF.kind === "header") {
                     const raw = ctxHF.startHeaderH + dy;
@@ -389,11 +388,10 @@ export function PageView({
             const ctx = dragRef.current;
             if (!ctx) return;
 
-            const { dx, dy } = clientToPageDelta(
-                ev.clientX - ctx.startClientX,
-                ev.clientY - ctx.startClientY,
-                ctx.scale
-            );
+            const el = wrapRef.current;
+            if (!el) return;
+            const cur = clientToPagePoint(el, ev.clientX, ev.clientY, pageW, pageH);
+            const { dx, dy } = clientToPageDelta(ctx.startPagePt, cur);
             const shift = ev.shiftKey;
 
             const result = applyDrag(ctx.side, ctx.startMargin, dx, dy, shift, ctx.pageW, ctx.bodyH);
@@ -405,8 +403,10 @@ export function PageView({
         function onUp(ev: PointerEvent) {
             const ctxHF = hfDragRef.current;
             if (ctxHF) {
-                const dyClient = ev.clientY - ctxHF.startClientY;
-                const dy = dyClient / (ctxHF.scale || 1);
+                const el = wrapRef.current;
+                if (!el) return;
+                const cur = clientToPagePoint(el, ev.clientX, ev.clientY, pageW, pageH);
+                const dy = cur.py - ctxHF.startPageY;
 
                 if (ctxHF.kind === "header") {
                     const raw = ctxHF.startHeaderH + dy;
@@ -539,10 +539,7 @@ export function PageView({
 
                 const el = wrapRef.current;
                 if (!el) return;
-                const rect = el.getBoundingClientRect();
-                const scale = rect.width / pageW;
-
-                const py = (e.clientY - rect.top) / scale;
+                const { py } = clientToPagePoint(el, e.clientX, e.clientY, pageW, pageH);
 
                 if (headerH > 0 && py >= 0 && py <= headerH) {
                     setEditingTarget("header");
@@ -560,10 +557,7 @@ export function PageView({
 
                 const el = wrapRef.current;
                 if (!el) return;
-                const rect = el.getBoundingClientRect();
-                const scale = rect.width / pageW;
-
-                const py = (e.clientY - rect.top) / scale;
+                const { py } = clientToPagePoint(el, e.clientX, e.clientY, pageW, pageH);
 
                 const inHeader = headerH > 0 && py >= 0 && py <= headerH;
                 const inFooter = footerH > 0 && py >= pageH - footerH && py <= pageH;

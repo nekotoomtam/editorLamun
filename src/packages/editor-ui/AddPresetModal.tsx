@@ -435,7 +435,7 @@ export function AddPresetModal({
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 260px", gap: 14, alignItems: "start" }}>
                         {/* left */}
                         <div style={{ display: "grid", gap: 12 }}>
-                            {showClone && (
+                            {/*     {showClone && (
                                 <div>
                                     <div style={{ fontSize: 12, fontWeight: 800, color: "#374151", marginBottom: 6 }}>
                                         Clone from
@@ -456,7 +456,7 @@ export function AddPresetModal({
                                         เลือก preset เดิมเพื่อ “copy” มาเป็น preset ใหม่
                                     </div>
                                 </div>
-                            )}
+                            )} */}
 
                             {/* ✅ Paper preset */}
                             {(presetMode === "create" || presetMode === "edit") && (

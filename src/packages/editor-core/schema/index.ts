@@ -147,6 +147,11 @@ export type NodeBase = {
     type: "text" | "box" | "image" | "group" | "field";
     name?: string;
 
+    /**
+     * Position/size อยู่ใน "page-space" เสมอ (origin = มุมซ้ายบนของกระดาษ)
+     * - สำหรับ owner.kind === 'page': x/y วัดจาก page origin
+     * - สำหรับ header/footer: x/y วัดจาก zone origin (ยังเป็น page-space แต่ UI อาจ offset ตอน render)
+     */
     x: number;
     y: number;
     w: number;
