@@ -15,8 +15,16 @@ import { getRenderLevel } from "./utils";
 import type { CanvasNavigatorHandle } from "../CanvasView";
 import { CANVAS_CONFIG } from "./canvasConfig";
 
-
-
+function clamp(n: number, min: number, max: number) {
+    return Math.max(min, Math.min(max, n));
+}
+function zoomStepFromWheel(deltaY: number) {
+    // ปรับความไวตรงนี้:
+    // 0.0015 = หมุน 100px => ~15% (ค่อนข้างไว)
+    // 0.0008 = หมุน 100px => ~8%  (กำลังดี)
+    const k = 0.0008;
+    return Math.exp(-deltaY * k); // smooth + ไม่พุ่ง
+}
 export function ScrollCanvas(props: {
     document: DocumentJson;
     pages: PageJson[];
@@ -45,7 +53,7 @@ export function ScrollCanvas(props: {
     } = props;
 
 
-
+    const prevZoomRef = useRef(zoom);
     const rootEl = scrollRootRef?.current ?? null;
     const pageRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const pendingNavRef = useRef<Id | null>(null);
@@ -93,11 +101,12 @@ export function ScrollCanvas(props: {
     });
 
     useImperativeHandle(refHandle, () => ({ navigateToPage: nav.navigateToPage }), [nav.navigateToPage]);
-
+    const progTimerRef = useRef<number | null>(null);
+    // If a page was inserted via a GapSlot, navigate after it exists in `pages`.
     useEffect(() => {
         const id = pendingNavRef.current;
         if (!id) return;
-        if (!pages.some(p => p.id === id)) return;
+        if (!pages.some((p) => p.id === id)) return;
 
         pendingNavRef.current = null;
         requestAnimationFrame(() => {
@@ -105,11 +114,42 @@ export function ScrollCanvas(props: {
         });
     }, [pages, nav.navigateToPage]);
 
+    useEffect(() => {
+        const el = scrollRootRef?.current ?? null;
+        if (!el) return;
+
+        const prevZoom = prevZoomRef.current;
+        if (prevZoom === zoom) return;
+
+        const padding = CANVAS_CONFIG.paddingPx;
+
+        // จุดกลางจอใน "doc space" (unscaled)
+        const anchorDocY =
+            (el.scrollTop + el.clientHeight / 2 - padding) / prevZoom;
+
+        // แปลงกลับเป็น scrollTop ใหม่
+        const nextScrollTop =
+            anchorDocY * zoom + padding - el.clientHeight / 2;
+
+        isProgrammaticScrollRef.current = true;
+        requestAnimationFrame(() => {
+            el.scrollTop = Math.max(0, Math.round(nextScrollTop));
+            if (progTimerRef.current) window.clearTimeout(progTimerRef.current);
+            progTimerRef.current = window.setTimeout(() => {
+                isProgrammaticScrollRef.current = false;
+                progTimerRef.current = null;
+            }, 120);
+        });
+
+        prevZoomRef.current = zoom;
+    }, [zoom, scrollRootRef]);
+
+
     const anchorIndex = nav.anchorIndex;
     const activeIndex = activePageId ? (indexById[activePageId] ?? -1) : -1;
     const GAP_RADIUS = CANVAS_CONFIG.gap.radiusPages;
     const PADDING_PX = CANVAS_CONFIG.paddingPx; // keep in sync with Canvas padding
-    const OVERSCAN_PAGES = CANVAS_CONFIG.virtualization.overscanPages;
+    // const OVERSCAN_PAGES = CANVAS_CONFIG.virtualization.overscanPages; // (kept in config)
 
     const { startIdx, endIdx, topSpacerPx, bottomSpacerPx } = useVirtualWindow({
         rootEl,
@@ -132,45 +172,6 @@ export function ScrollCanvas(props: {
     const shouldRenderGap = (idx: number) =>
         Math.abs(idx - anchorIndex) <= GAP_RADIUS ||
         (activeIndex >= 0 && Math.abs(idx - activeIndex) <= GAP_RADIUS);
-
-    const prevZoomRef = useRef(zoom);
-
-    useEffect(() => {
-        if (!rootEl) return;
-        const prevZoom = prevZoomRef.current;
-        if (prevZoom === zoom) return;
-
-        // 1) เก็บ anchor กลางจอเป็น unscaled
-        const centerPx = rootEl.scrollTop + rootEl.clientHeight / 2;
-        const centerUnscaled = (centerPx - CANVAS_CONFIG.paddingPx) / prevZoom;
-
-        // 2) หา page index จาก offsets/heights
-        const { offsets, heights } = pageMetrics;
-        let idx = 0;
-        // binary search จะดีกว่า แต่ loop ก็พอถ้ายังไม่หนัก
-        for (let i = 0; i < offsets.length; i++) {
-            const top = offsets[i];
-            const bottom = top + (heights[i] ?? 0);
-            if (centerUnscaled >= top && centerUnscaled < bottom) { idx = i; break; }
-            if (centerUnscaled >= top) idx = i; // เผื่ออยู่ใน gap ให้เกาะหน้าล่าสุด
-        }
-
-        const top = offsets[idx] ?? 0;
-        const offsetInPage = Math.max(0, centerUnscaled - top);
-
-        // 3) set scrollTop ใหม่ตาม zoom ใหม่
-        const nextCenterPx = (top + offsetInPage) * zoom + CANVAS_CONFIG.paddingPx;
-        const nextTop = Math.max(0, nextCenterPx - rootEl.clientHeight / 2);
-
-        // กัน nav คิดว่าเป็น manual scroll
-        isProgrammaticScrollRef.current = true;
-        rootEl.scrollTop = nextTop;
-        window.setTimeout(() => (isProgrammaticScrollRef.current = false), 80);
-
-        prevZoomRef.current = zoom;
-    }, [zoom, rootEl, pageMetrics, isProgrammaticScrollRef]);
-
-
     return (
         <div style={{ padding: CANVAS_CONFIG.paddingPx }}>
             <div style={{ height: topSpacerPx }} />

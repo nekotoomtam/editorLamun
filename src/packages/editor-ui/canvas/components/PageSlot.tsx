@@ -17,6 +17,7 @@ export function PageSlot(props: {
                 height: height * zoom,
                 position: "relative",
                 margin: "0 auto",
+                contain: "layout paint size", // ✅ ช่วย isolate งาน
             }}
             ref={(el) => registerRef(id, el)}
         >
@@ -26,10 +27,12 @@ export function PageSlot(props: {
                     transformOrigin: "top left",
                     width,
                     height,
+                    willChange: "transform", // ✅
                 }}
             >
                 {children}
             </div>
         </div>
+
     );
 }
