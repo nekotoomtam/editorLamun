@@ -1,6 +1,12 @@
 export const CANVAS_CONFIG = {
     paddingPx: 24,
 
+    zoom: {
+        // ใช้ค่าชุดเดียวกันทั้งปุ่ม +/- และ ctrl/meta + wheel
+        min: 0.25,
+        max: 3,
+    },
+
     viewingDeadZone: {
         topRatio: 0.35,
         bottomRatio: 0.65,

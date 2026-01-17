@@ -2,6 +2,8 @@
 
 import React from "react";
 
+import { CANVAS_CONFIG } from "../canvas/canvasConfig";
+
 function clamp(n: number, min: number, max: number) {
     return Math.max(min, Math.min(max, n));
 }
@@ -9,8 +11,8 @@ function clamp(n: number, min: number, max: number) {
 export function ZoomControl({
     zoom,
     setZoom,
-    min = 0.25,
-    max = 3,
+    min = CANVAS_CONFIG.zoom.min,
+    max = CANVAS_CONFIG.zoom.max,
     step = 0.1,
 }: {
     zoom: number;
@@ -19,8 +21,9 @@ export function ZoomControl({
     max?: number;
     step?: number;
 }) {
-    const inc = () => setZoom(clamp(Number((zoom + step).toFixed(2)), min, max));
-    const dec = () => setZoom(clamp(Number((zoom - step).toFixed(2)), min, max));
+    // ห้ามปัดเศษตอน set state (ปัดเฉพาะตอนแสดง %)
+    const inc = () => setZoom(clamp(zoom + step, min, max));
+    const dec = () => setZoom(clamp(zoom - step, min, max));
     const reset = () => setZoom(1);
 
     return (

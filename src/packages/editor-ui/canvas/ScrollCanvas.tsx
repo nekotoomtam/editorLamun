@@ -1,4 +1,4 @@
-import React, { useEffect, useImperativeHandle, useRef } from "react";
+import React, { useEffect, useImperativeHandle, useLayoutEffect, useRef } from "react";
 
 import type { DocumentJson, Id, PageJson } from "../../editor-core/schema";
 
@@ -128,15 +128,42 @@ export function ScrollCanvas(props: {
         const extra = effectiveZoom / base;
         const el = contentElRef.current;
         if (!el) return;
-        (el.style as any).zoom = String(extra);
+        // ใช้ transform แทน css zoom: ลื่นกว่าและไม่ไปชนกับ layout/scroll บางเคส
+        // IMPORTANT: ตั้ง origin เป็น top-center เพื่อให้ zoom เข้า/ออกแล้วยังคง "อยู่กลาง" ของหน้า
+        // (origin ซ้ายบนจะทำให้ zoom เข้าแล้วดึงไปซ้าย / zoom ออกแล้วดึงไปขวา)
+        el.style.transformOrigin = "50% 0";
+        el.style.transform = `scale(${extra})`;
     }, []);
 
-    useEffect(() => {
+    // IMPORTANT: when committing zoom (setZoom), we must avoid a 1-frame mismatch where
+    // live transform scale is cleared before React finishes rendering the new `zoom`.
+    // useLayoutEffect runs before paint, so we can atomically:
+    // - update committedZoomRef
+    // - clear live transform *only after* the committed zoom matches the live zoom
+    useLayoutEffect(() => {
         committedZoomRef.current = zoom;
-        if (!isZoomingRef.current) {
-            liveZoomRef.current = zoom;
-            const el = contentElRef.current;
-            if (el) (el.style as any).zoom = "1";
+
+        const el = contentElRef.current;
+        const EPS = 1e-6;
+
+        if (isZoomingRef.current) {
+            // We're in a live-zoom session; clear the extra transform only once the
+            // committed zoom catches up.
+            if (Math.abs(liveZoomRef.current - zoom) < EPS) {
+                if (el) {
+                    el.style.transform = "";
+                    el.style.transformOrigin = "";
+                }
+                isZoomingRef.current = false;
+            }
+            return;
+        }
+
+        // Not zooming: keep refs in sync and ensure no leftover transform.
+        liveZoomRef.current = zoom;
+        if (el) {
+            el.style.transform = "";
+            el.style.transformOrigin = "";
         }
     }, [zoom]);
 
@@ -144,7 +171,6 @@ export function ScrollCanvas(props: {
         if (zoomCommitTimerRef.current != null) window.clearTimeout(zoomCommitTimerRef.current);
         zoomCommitTimerRef.current = window.setTimeout(() => {
             zoomCommitTimerRef.current = null;
-            isZoomingRef.current = false;
             setZoom(liveZoomRef.current);
             if (rootEl) requestAnimationFrame(() => rootEl.dispatchEvent(new Event("scroll")));
         }, 160);
@@ -212,7 +238,11 @@ export function ScrollCanvas(props: {
                         const accDeltaY = zoomWheelDeltaAccRef.current;
                         zoomWheelDeltaAccRef.current = 0;
 
-                        const next = clamp(prev * zoomStepFromWheel(accDeltaY), 0.3, 3);
+                        const next = clamp(
+                            prev * zoomStepFromWheel(accDeltaY),
+                            CANVAS_CONFIG.zoom.min,
+                            CANVAS_CONFIG.zoom.max
+                        );
                         if (next === prev) return;
 
                         const rect = el.getBoundingClientRect();
@@ -306,7 +336,7 @@ export function ScrollCanvas(props: {
         (activeIndex >= 0 && Math.abs(idx - activeIndex) <= GAP_RADIUS);
     return (
         <div style={{ padding: CANVAS_CONFIG.paddingPx }}>
-            <div ref={contentElRef} style={{ willChange: "zoom" as any }}>
+            <div ref={contentElRef} style={{ willChange: "transform" }}>
                 <div style={{ height: topSpacerPx }} />
                 {windowPages.map((p, i) => {
                     const idx = startIdx + i;
