@@ -405,6 +405,7 @@ export function PagesPanel({
                                                     showMargin={false}
                                                     active={false}
                                                     renderNodes={false}
+                                                    zoom={scale}
                                                 />
                                             </div>
                                         </div>

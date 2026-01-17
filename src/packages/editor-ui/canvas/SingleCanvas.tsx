@@ -35,6 +35,7 @@ export function SingleCanvas(props: {
                             markManualSelect();
                             setActivePageId(page.id);
                         }}
+                        zoom={zoom}
                     />
                 </div>
             </div>

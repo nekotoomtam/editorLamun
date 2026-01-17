@@ -19,7 +19,9 @@ export function PageSlot(props: {
                 position: "relative",
                 margin: "0 auto",
                 contain: "layout paint size",
+                ...({ ["--zoom" as any]: zoom } as any),
             }}
+
         >
             <div
                 style={{
@@ -31,6 +33,9 @@ export function PageSlot(props: {
                     transform: `scale(${zoom})`,
                     transformOrigin: "top left",
                     willChange: "transform",
+                    // Expose zoom to descendants so they can render hairline strokes
+                    // that remain ~1 device pixel thick while the page is scaled.
+                    ...({ ["--zoom" as any]: zoom } as any),
                 }}
             >
                 {children}

@@ -58,15 +58,10 @@ export function ScrollCanvas(props: {
 
     useEffect(() => {
         setRootEl(scrollRootRef?.current ?? null);
-    }, [scrollRootRef]);
+    }, [scrollRootRef?.current]);
     const pageRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const pendingNavRef = useRef<Id | null>(null);
     const isProgrammaticScrollRef = useRef(false);
-
-    useEffect(() => {
-        if (!rootEl) setRootEl(scrollRootRef?.current ?? null);
-    }, [rootEl, scrollRootRef]);
-
 
     const indexById = React.useMemo(() => {
         const m: Record<string, number> = {};
@@ -85,7 +80,7 @@ export function ScrollCanvas(props: {
 
     const { scrollToPage, markManualSelect, registerPageRef, lastManualSelectAtRef } =
         useScrollToPage({ rootEl, pageRefs, isProgrammaticScrollRef, getPageTop, zoom, paddingTop: CANVAS_CONFIG.paddingPx });
-
+    const isZoomingRef = useRef(false);
     const nodesMock = usePageNodesMock(document);
 
     const nav = usePageNavigator({
@@ -106,6 +101,7 @@ export function ScrollCanvas(props: {
         ensureAround: (pageId, r) => nodesMock.ensureAround(pageId, r),
         preloadRadius: 2,
         isProgrammaticScrollRef,
+        isZoomingRef,
     });
 
     useImperativeHandle(refHandle, () => ({ navigateToPage: nav.navigateToPage }), [nav.navigateToPage]);
@@ -121,13 +117,42 @@ export function ScrollCanvas(props: {
         });
     }, [pages, nav.navigateToPage]);
 
-    const zoomRef = useRef(zoom);
-    // Ctrl/meta + wheel zoom can fire extremely frequently (especially on trackpads).
-    // To avoid jank, we batch zoom + scrollTop updates into at most 1 commit per frame.
+    // -------- Live zoom plumbing --------
+    const contentElRef = useRef<HTMLDivElement | null>(null);
+    const committedZoomRef = useRef(zoom);
+    const liveZoomRef = useRef(zoom);
+    const zoomCommitTimerRef = useRef<number | null>(null);
+
+    const applyLiveZoom = React.useCallback((effectiveZoom: number) => {
+        const base = committedZoomRef.current || 1;
+        const extra = effectiveZoom / base;
+        const el = contentElRef.current;
+        if (!el) return;
+        (el.style as any).zoom = String(extra);
+    }, []);
+
+    useEffect(() => {
+        committedZoomRef.current = zoom;
+        if (!isZoomingRef.current) {
+            liveZoomRef.current = zoom;
+            const el = contentElRef.current;
+            if (el) (el.style as any).zoom = "1";
+        }
+    }, [zoom]);
+
+    const scheduleCommitZoom = React.useCallback(() => {
+        if (zoomCommitTimerRef.current != null) window.clearTimeout(zoomCommitTimerRef.current);
+        zoomCommitTimerRef.current = window.setTimeout(() => {
+            zoomCommitTimerRef.current = null;
+            isZoomingRef.current = false;
+            setZoom(liveZoomRef.current);
+            if (rootEl) requestAnimationFrame(() => rootEl.dispatchEvent(new Event("scroll")));
+        }, 160);
+    }, [rootEl, setZoom]);
+
     const zoomWheelDeltaAccRef = useRef(0);
     const zoomWheelClientYRef = useRef<number | null>(null);
     const zoomWheelRafRef = useRef<number | null>(null);
-    useEffect(() => { zoomRef.current = zoom; }, [zoom]);
 
     useEffect(() => {
         const el = rootEl;
@@ -178,7 +203,7 @@ export function ScrollCanvas(props: {
                     zoomWheelRafRef.current = requestAnimationFrame(() => {
                         zoomWheelRafRef.current = null;
 
-                        const prev = zoomRef.current;
+                        const prev = liveZoomRef.current;
                         if (!Number.isFinite(prev) || prev <= 0) {
                             zoomWheelDeltaAccRef.current = 0;
                             return;
@@ -199,8 +224,11 @@ export function ScrollCanvas(props: {
                         const docY = (el.scrollTop + anchorY - PAD) / prev;
                         el.scrollTop = docY * next - anchorY + PAD;
 
-
-                        setZoom(next);
+                        // Apply live zoom without forcing React to re-render.
+                        isZoomingRef.current = true;
+                        liveZoomRef.current = next;
+                        applyLiveZoom(next);
+                        scheduleCommitZoom();
                     });
                 }
                 return;
@@ -236,13 +264,17 @@ export function ScrollCanvas(props: {
             zoomWheelDeltaAccRef.current = 0;
             zoomWheelClientYRef.current = null;
         };
-    }, [rootEl, setZoom]);
+    }, [rootEl, applyLiveZoom, scheduleCommitZoom]);
 
 
-    // IMPORTANT: Do not add another ctrl/meta wheel listener here.
-    // Having multiple wheel listeners that all call setZoom will cause zoom to "fight"
-    // (double updates, inconsistent preventDefault/stopPropagation behavior).
-
+    useEffect(() => {
+        return () => {
+            if (zoomCommitTimerRef.current != null) {
+                window.clearTimeout(zoomCommitTimerRef.current);
+                zoomCommitTimerRef.current = null;
+            }
+        };
+    }, []);
 
     const anchorIndex = nav.anchorIndex;
     const activeIndex = activePageId ? (indexById[activePageId] ?? -1) : -1;
@@ -256,6 +288,7 @@ export function ScrollCanvas(props: {
         heights: pageMetrics.heights,
         zoom,
         paddingPx: PADDING_PX,
+        isZoomingRef,
         anchorIndex,
         activeIndex,
 
@@ -273,45 +306,74 @@ export function ScrollCanvas(props: {
         (activeIndex >= 0 && Math.abs(idx - activeIndex) <= GAP_RADIUS);
     return (
         <div style={{ padding: CANVAS_CONFIG.paddingPx }}>
-            <div style={{ height: topSpacerPx }} />
-            {windowPages.map((p, i) => {
-                const idx = startIdx + i;
-                const dist = Math.abs(idx - anchorIndex);
-                const level = getRenderLevel(dist, CANVAS_CONFIG.renderLevel.fullRadius, CANVAS_CONFIG.renderLevel.skeletonRadius);
+            <div ref={contentElRef} style={{ willChange: "zoom" as any }}>
+                <div style={{ height: topSpacerPx }} />
+                {windowPages.map((p, i) => {
+                    const idx = startIdx + i;
+                    const dist = Math.abs(idx - anchorIndex);
+                    const level = getRenderLevel(dist, CANVAS_CONFIG.renderLevel.fullRadius, CANVAS_CONFIG.renderLevel.skeletonRadius);
 
-                const preset = document.pagePresetsById?.[p.presetId];
-                const pageW = preset?.size?.width ?? 820;
-                const pageH = preset?.size?.height ?? 1100;
+                    const preset = document.pagePresetsById?.[p.presetId];
+                    const pageW = preset?.size?.width ?? 820;
+                    const pageH = preset?.size?.height ?? 1100;
 
-                return (
-                    <React.Fragment key={p.id}>
-                        <PageSlot
-                            id={p.id}
-                            width={pageW}
-                            height={pageH}
-                            zoom={zoom}
-                            registerRef={registerPageRef}
-                        >
-                            <VirtualPage
-                                document={document}
-                                page={p}
-                                showMargin={showMargin}
-                                active={p.id === activePageId}
-                                level={level}
-                                onActivate={() => {
-                                    if (p.id === activePageId) return;
-                                    nav.navigateToPage(p.id, {
-                                        source: "canvas",
-                                        behavior: "auto",
-                                        smoothDistancePages: CANVAS_CONFIG.navigation.smoothDistancePages,
-                                    });
-                                }}
-                                loading={nodesMock.isLoading(p.id) && p.id === pages[anchorIndex]?.id}
-                            />
-                        </PageSlot>
+                    return (
+                        <React.Fragment key={p.id}>
+                            <PageSlot
+                                id={p.id}
+                                width={pageW}
+                                height={pageH}
+                                zoom={zoom}
+                                registerRef={registerPageRef}
+                            >
+                                <VirtualPage
+                                    document={document}
+                                    page={p}
+                                    showMargin={showMargin}
+                                    active={p.id === activePageId}
+                                    level={level}
+                                    onActivate={() => {
+                                        if (p.id === activePageId) return;
+                                        nav.navigateToPage(p.id, {
+                                            source: "canvas",
+                                            behavior: "auto",
+                                            smoothDistancePages: CANVAS_CONFIG.navigation.smoothDistancePages,
+                                        });
+                                    }}
+                                    loading={nodesMock.isLoading(p.id) && p.id === pages[anchorIndex]?.id}
+                                />
+                            </PageSlot>
 
-                        {idx < pages.length - 1 && idx + 1 < endIdx && (
-                            shouldRenderGap(idx) ? (
+                            {idx < pages.length - 1 && idx + 1 < endIdx && (
+                                shouldRenderGap(idx) ? (
+                                    <GapSlot
+                                        width={pageW}
+                                        gapPx={pageMetrics.gapPx}
+                                        zoom={zoom}
+                                        scrollRoot={rootEl}
+                                        onAdd={() => {
+                                            markManualSelect();
+                                            const newId = onAddPageAfter?.(p.id);
+                                            if (!newId) return;
+                                            pendingNavRef.current = newId;
+                                        }}
+                                    />
+                                ) : (
+                                    <div style={{ height: pageMetrics.gapPx * zoom }} />
+                                )
+                            )}
+                        </React.Fragment>
+                    );
+                })}
+
+                {pages.length > 0 && (
+                    shouldRenderGap(pages.length - 1) ? (
+                        (() => {
+                            const last = pages[pages.length - 1];
+                            const preset = document.pagePresetsById?.[last.presetId];
+                            const pageW = preset?.size?.width ?? 820;
+
+                            return (
                                 <GapSlot
                                     width={pageW}
                                     gapPx={pageMetrics.gapPx}
@@ -319,48 +381,21 @@ export function ScrollCanvas(props: {
                                     scrollRoot={rootEl}
                                     onAdd={() => {
                                         markManualSelect();
-                                        const newId = onAddPageAfter?.(p.id);
+                                        const lastId = last.id;
+                                        const newId = onAddPageAfter?.(lastId);
                                         if (!newId) return;
+                                        setActivePageId(newId);
                                         pendingNavRef.current = newId;
                                     }}
                                 />
-                            ) : (
-                                <div style={{ height: pageMetrics.gapPx * zoom }} />
-                            )
-                        )}
-                    </React.Fragment>
-                );
-            })}
-
-            {pages.length > 0 && (
-                shouldRenderGap(pages.length - 1) ? (
-                    (() => {
-                        const last = pages[pages.length - 1];
-                        const preset = document.pagePresetsById?.[last.presetId];
-                        const pageW = preset?.size?.width ?? 820;
-
-                        return (
-                            <GapSlot
-                                width={pageW}
-                                gapPx={pageMetrics.gapPx}
-                                zoom={zoom}
-                                scrollRoot={rootEl}
-                                onAdd={() => {
-                                    markManualSelect();
-                                    const lastId = last.id;
-                                    const newId = onAddPageAfter?.(lastId);
-                                    if (!newId) return;
-                                    setActivePageId(newId);
-                                    pendingNavRef.current = newId;
-                                }}
-                            />
-                        );
-                    })()
-                ) : (
-                    <div style={{ height: pageMetrics.gapPx * zoom }} />
-                )
-            )}
-            <div style={{ height: bottomSpacerPx }} />
+                            );
+                        })()
+                    ) : (
+                        <div style={{ height: pageMetrics.gapPx * zoom }} />
+                    )
+                )}
+                <div style={{ height: bottomSpacerPx }} />
+            </div>
         </div>
     );
 }

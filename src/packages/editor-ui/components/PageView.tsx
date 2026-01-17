@@ -28,6 +28,7 @@ export function PageView({
     loading,
     renderNodes = true,
     thumbPreview = false,
+    zoom = 1,
 }: {
     document: DocumentJson;
     page: PageJson;
@@ -38,6 +39,7 @@ export function PageView({
     loading?: boolean;
     renderNodes?: boolean;
     thumbPreview?: boolean;
+    zoom?: number;
 }) {
     const preset = document.pagePresetsById?.[page.presetId] ?? null;
     if (!preset) return <div>no preset</div>;
@@ -108,6 +110,41 @@ export function PageView({
     // ใช้ margin สำหรับ render (ถ้ากำลังลาก ให้ใช้ preview)
     const margin = previewMargin ?? baseMargin;
 
+
+    const previewMarginRef = useRef<PagePreset["margin"] | null>(null);
+    useEffect(() => { previewMarginRef.current = previewMargin; }, [previewMargin]);
+
+    const pageWRef = useRef(pageW);
+    const pageHRef = useRef(pageH);
+
+    useEffect(() => { pageWRef.current = pageW; pageHRef.current = pageH; }, [pageW, pageH]);
+
+    const hfZoneRef = useRef(hfZone);
+    useEffect(() => { hfZoneRef.current = hfZone; }, [hfZone]);
+
+    // เก็บฟังก์ชันจาก store ไว้ใน ref กัน identity เปลี่ยนแล้ว effect วิ่ง
+    const storeFnsRef = useRef({
+        updatePresetMargin,
+        updatePageMargin,
+        updateRepeatAreaHeightPx,
+        setEditingTarget,
+        setSelectedNodeIds,
+    });
+    useEffect(() => {
+        storeFnsRef.current = {
+            updatePresetMargin,
+            updatePageMargin,
+            updateRepeatAreaHeightPx,
+            setEditingTarget,
+            setSelectedNodeIds,
+        };
+    }, [updatePresetMargin, updatePageMargin, updateRepeatAreaHeightPx, setEditingTarget, setSelectedNodeIds]);
+
+
+
+
+
+
     // rects/page-lines ใช้ single source of truth (รองรับ preview margin/header/footer)
     const rects = useMemo(() => {
         return computePageRects({
@@ -141,26 +178,29 @@ export function PageView({
     }>(null);
 
     function clampHeader(nextHeaderH: number, footerH: number, pageH: number) {
+        const z = hfZoneRef.current;
         return Cmd.clampRepeatAreaHeightPx({
             kind: "header",
             desiredPx: nextHeaderH,
             pageH,
             otherPx: footerH,
-            areaMinPx: hfZone?.header?.minHeightPx,
-            areaMaxPx: hfZone?.header?.maxHeightPx,
+            areaMinPx: z?.header?.minHeightPx,
+            areaMaxPx: z?.header?.maxHeightPx,
         });
     }
 
     function clampFooter(nextFooterH: number, headerH: number, pageH: number) {
+        const z = hfZoneRef.current;
         return Cmd.clampRepeatAreaHeightPx({
             kind: "footer",
             desiredPx: nextFooterH,
             pageH,
             otherPx: headerH,
-            areaMinPx: hfZone?.footer?.minHeightPx,
-            areaMaxPx: hfZone?.footer?.maxHeightPx,
+            areaMinPx: z?.footer?.minHeightPx,
+            areaMaxPx: z?.footer?.maxHeightPx,
         });
     }
+
 
     // NOTE: client->page conversion is centralized in editor-ui/utils/coords.ts
 
@@ -269,10 +309,13 @@ export function PageView({
     // ===== pointer handlers =====
     function onPointerMoveLocal(e: React.PointerEvent) {
         if (dragRef.current || hfDragRef.current) return;
-
         const el = wrapRef.current;
         if (!el) return;
-        const { px, py } = clientToPagePoint(el, e.clientX, e.clientY, pageW, pageH);
+
+        const pw = pageWRef.current;
+        const ph = pageHRef.current;
+
+        const { px, py } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
         const nearHeaderBottom = headerH > 0 && Math.abs(py - headerH) <= HF_HIT;
         const nearFooterTop = footerH > 0 && Math.abs(py - (pageH - footerH)) <= HF_HIT;
 
@@ -305,7 +348,10 @@ export function PageView({
         const el = wrapRef.current;
         if (!el) return;
 
-        const { py } = clientToPagePoint(el, e.clientX, e.clientY, pageW, pageH);
+        const pw = pageWRef.current;
+        const ph = pageHRef.current;
+
+        const { py } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
 
         const nearHeaderBottom = headerH > 0 && Math.abs(py - headerH) <= HF_HIT;
         const nearFooterTop = footerH > 0 && Math.abs(py - (pageH - footerH)) <= HF_HIT;
@@ -314,7 +360,7 @@ export function PageView({
 
         if (nearHeaderBottom || nearFooterTop) {
             (el as any).setPointerCapture?.(e.pointerId);
-            const pt = clientToPagePoint(el, e.clientX, e.clientY, pageW, pageH);
+            const pt = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
             hfDragRef.current = {
                 presetId: preset.id,
                 kind: nearHeaderBottom ? "header" : "footer",
@@ -344,7 +390,7 @@ export function PageView({
             source,
             side: hoverSide,
             startPagePt: (() => {
-                const pt = clientToPagePoint(el, e.clientX, e.clientY, pageW, pageH);
+                const pt = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
                 return { px: pt.px, py: pt.py };
             })(),
             startMargin: baseMargin,
@@ -365,7 +411,11 @@ export function PageView({
             if (ctxHF) {
                 const el = wrapRef.current;
                 if (!el) return;
-                const cur = clientToPagePoint(el, ev.clientX, ev.clientY, pageW, pageH);
+
+                const pw = pageWRef.current;
+                const ph = pageHRef.current;
+
+                const cur = clientToPagePoint(el, ev.clientX, ev.clientY, pw, ph);
                 const dy = cur.py - ctxHF.startPageY;
 
                 if (ctxHF.kind === "header") {
@@ -377,12 +427,8 @@ export function PageView({
                     const curHeaderH = previewHeaderHRef.current ?? hfRef.current.headerH;
                     setPreviewFooterH(clampFooter(raw, curHeaderH, ctxHF.pageH));
                 }
-
-
-
                 return;
             }
-
 
             // ✅ 2) margin drag
             const ctx = dragRef.current;
@@ -390,7 +436,11 @@ export function PageView({
 
             const el = wrapRef.current;
             if (!el) return;
-            const cur = clientToPagePoint(el, ev.clientX, ev.clientY, pageW, pageH);
+
+            const pw = pageWRef.current;
+            const ph = pageHRef.current;
+
+            const cur = clientToPagePoint(el, ev.clientX, ev.clientY, pw, ph);
             const { dx, dy } = clientToPageDelta(ctx.startPagePt, cur);
             const shift = ev.shiftKey;
 
@@ -399,45 +449,50 @@ export function PageView({
             setLimitSide(result.hitLimit ? ctx.side : null);
         }
 
-
         function onUp(ev: PointerEvent) {
+            const el = wrapRef.current;
+
+            // header/footer commit
             const ctxHF = hfDragRef.current;
             if (ctxHF) {
-                const el = wrapRef.current;
                 if (!el) return;
-                const cur = clientToPagePoint(el, ev.clientX, ev.clientY, pageW, pageH);
+
+                const pw = pageWRef.current;
+                const ph = pageHRef.current;
+
+                const cur = clientToPagePoint(el, ev.clientX, ev.clientY, pw, ph);
                 const dy = cur.py - ctxHF.startPageY;
+
+                const fns = storeFnsRef.current;
 
                 if (ctxHF.kind === "header") {
                     const raw = ctxHF.startHeaderH + dy;
                     const curFooterH = previewFooterHRef.current ?? hfRef.current.footerH;
                     const next = clampHeader(raw, curFooterH, ctxHF.pageH);
-                    updateRepeatAreaHeightPx(ctxHF.presetId, "header", roundInt(next));
+                    fns.updateRepeatAreaHeightPx(ctxHF.presetId, "header", roundInt(next));
                 } else {
                     const raw = ctxHF.startFooterH - dy;
                     const curHeaderH = previewHeaderHRef.current ?? hfRef.current.headerH;
                     const next = clampFooter(raw, curHeaderH, ctxHF.pageH);
-                    updateRepeatAreaHeightPx(ctxHF.presetId, "footer", roundInt(next));
+                    fns.updateRepeatAreaHeightPx(ctxHF.presetId, "footer", roundInt(next));
                 }
-
 
                 hfDragRef.current = null;
                 setPreviewHeaderH(null);
                 setPreviewFooterH(null);
 
-                try { wrapRef.current?.releasePointerCapture?.(ctxHF.pointerId); } catch { }
-
+                try { el.releasePointerCapture?.(ctxHF.pointerId); } catch { }
                 return;
             }
 
-
+            // margin commit
             const ctx = dragRef.current;
             if (!ctx) return;
 
-            // commit ตอนปล่อยเท่านั้น
-            const final = previewMargin ?? ctx.startMargin;
+            const fns = storeFnsRef.current;
 
-            // ปัดเป็น int ตอน commit
+            const final = previewMarginRef.current ?? ctx.startMargin;
+
             const patch: Partial<PagePreset["margin"]> = {
                 top: roundInt(final.top),
                 right: roundInt(final.right),
@@ -446,17 +501,13 @@ export function PageView({
             };
 
             if (ctx.source === "preset") {
-                updatePresetMargin(ctx.presetId, patch);
-                try { wrapRef.current?.releasePointerCapture?.(ctx.pointerId); } catch { }
-
-
+                fns.updatePresetMargin(ctx.presetId, patch);
             } else {
-                updatePageMargin(ctx.pageId, patch);
-                try { wrapRef.current?.releasePointerCapture?.(ctx.pointerId); } catch { }
-
+                fns.updatePageMargin(ctx.pageId, patch);
             }
 
-            // clear
+            try { el?.releasePointerCapture?.(ctx.pointerId); } catch { }
+
             dragRef.current = null;
             setDragSide(null);
             setLimitSide(null);
@@ -469,9 +520,7 @@ export function PageView({
             window.removeEventListener("pointermove", onMove);
             window.removeEventListener("pointerup", onUp);
         };
-        // ⚠️ previewMargin ใช้ตอน commit ต้องอยู่ deps
-    }, [previewMargin, updatePageMargin, updatePresetMargin, updateRepeatAreaHeightPx, setEditingTarget, setSelectedNodeIds]);
-
+    }, []);
 
     // ===== show margin overlay? =====
     const shouldShowMargin = showMargin ?? (active && !thumbPreview);
@@ -506,6 +555,18 @@ export function PageView({
     const isPageMode = editingTarget === "page";
 
     const showZones = true;
+    // Render "hairline" strokes (≈1 device pixel) even when the whole page is scaled.
+    // PageSlot provides CSS var --zoom.
+    const hairline = `calc(1px / ${zoom || 1})`;
+
+    const snapDocY = (yDoc: number) => {
+        const z = zoom || 1;
+        return Math.round(yDoc * z) / z;
+    };
+
+    const headerLineY = headerH > 0 ? snapDocY(headerH) : null;
+    const footerLineY = footerH > 0 ? snapDocY(pageH - footerH) : null;
+
 
     return (
         <div
@@ -539,7 +600,9 @@ export function PageView({
 
                 const el = wrapRef.current;
                 if (!el) return;
-                const { py } = clientToPagePoint(el, e.clientX, e.clientY, pageW, pageH);
+                const pw = pageWRef.current;
+                const ph = pageHRef.current;
+                const { py } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
 
                 if (headerH > 0 && py >= 0 && py <= headerH) {
                     setEditingTarget("header");
@@ -557,7 +620,9 @@ export function PageView({
 
                 const el = wrapRef.current;
                 if (!el) return;
-                const { py } = clientToPagePoint(el, e.clientX, e.clientY, pageW, pageH);
+                const pw = pageWRef.current;
+                const ph = pageHRef.current;
+                const { py } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
 
                 const inHeader = headerH > 0 && py >= 0 && py <= headerH;
                 const inFooter = footerH > 0 && py >= pageH - footerH && py <= pageH;
@@ -604,7 +669,7 @@ export function PageView({
                             top: content.y,
                             width: content.w,
                             height: content.h,
-                            border: "1px dashed #9ca3af",
+                            border: `${hairline} dashed #9ca3af`,
                             pointerEvents: "none",
                         }}
                         title="margin"
@@ -620,7 +685,7 @@ export function PageView({
                                     left: 0,
                                     top: headerH + margin.top,
                                     width: preset.size.width,
-                                    height: 1,
+                                    height: hairline,
                                     ...lineStyle(
                                         highlightSide === "top",
                                         limitSide === "top"
@@ -635,7 +700,7 @@ export function PageView({
                                     left: 0,
                                     top: preset.size.height - footerH - margin.bottom,
                                     width: preset.size.width,
-                                    height: 1,
+                                    height: hairline,
                                     ...lineStyle(highlightSide === "bottom", limitSide === "bottom"),
                                     pointerEvents: "none",
                                 }}
@@ -646,7 +711,7 @@ export function PageView({
                                     position: "absolute",
                                     left: margin.left,
                                     top: 0,
-                                    width: 1,
+                                    width: hairline,
                                     height: preset.size.height,
                                     ...lineStyle(highlightSide === "left", limitSide === "left"),
                                     pointerEvents: "none",
@@ -658,7 +723,7 @@ export function PageView({
                                     position: "absolute",
                                     left: preset.size.width - margin.right,
                                     top: 0,
-                                    width: 1,
+                                    width: hairline,
                                     height: preset.size.height,
                                     ...lineStyle(highlightSide === "right", limitSide === "right"),
                                     pointerEvents: "none",
@@ -691,27 +756,20 @@ export function PageView({
                 <>
                     {/* ===== Header zone ===== */}
                     {headerH > 0 && (
-                        <div
-                            style={{
-                                position: "absolute",
-                                left: 0,
-                                top: 0,
-                                width: pageW,
-                                height: headerH,
-
-                                // จางมาก ไม่รบกวนสายตา
-                                /*   background: "rgba(0,0,0,0.015)", */
-
-                                // เน้นที่เส้น
-                                borderBottom: `1px solid ${isHeaderMode ? "rgba(59,130,246,0.65)" : "rgba(0,0,0,0.12)"
-                                    }`,
-
-                                pointerEvents: "none",
-                                zIndex: 2,
-                            }}
-                        />
+                        <div style={{ position: "absolute", left: 0, top: 0, width: pageW, height: headerH, pointerEvents: "none", zIndex: 2 }} />
                     )}
-
+                    {headerLineY != null && (
+                        <div style={{
+                            position: "absolute",
+                            left: 0,
+                            top: headerLineY,
+                            width: pageW,
+                            height: hairline,
+                            background: isHeaderMode ? "rgba(59,130,246,0.65)" : "rgba(0,0,0,0.12)",
+                            pointerEvents: "none",
+                            zIndex: 3,
+                        }} />
+                    )}
                     {/* ===== Footer zone ===== */}
                     {footerH > 0 && (
                         <div
@@ -721,17 +779,27 @@ export function PageView({
                                 top: pageH - footerH,
                                 width: pageW,
                                 height: footerH,
-
-                                /*  background: "rgba(0,0,0,0.015)", */
-
-                                borderTop: `1px solid ${isFooterMode ? "rgba(59,130,246,0.65)" : "rgba(0,0,0,0.12)"
-                                    }`,
-
                                 pointerEvents: "none",
                                 zIndex: 2,
                             }}
                         />
                     )}
+                    {footerLineY != null && (
+                        <div
+                            style={{
+                                position: "absolute",
+                                left: 0,
+                                top: footerLineY,
+                                width: pageW,
+                                height: hairline,
+                                background: isFooterMode ? "rgba(59,130,246,0.65)" : "rgba(0,0,0,0.12)",
+                                pointerEvents: "none",
+                                zIndex: 3,
+                            }}
+                        />
+                    )}
+
+
 
                     {/* ===== Header label (เฉพาะตอนเข้าโหมด) ===== */}
                     {isHeaderMode && headerH > 0 && (

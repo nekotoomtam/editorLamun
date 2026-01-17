@@ -40,6 +40,13 @@ export type UsePageNavigatorArgs = {
     // render window radius
     preloadRadius?: number;
     isProgrammaticScrollRef: React.MutableRefObject<boolean>;
+
+    /**
+     * If true, suppress scroll-driven anchor/viewing updates.
+     * Helps avoid flicker during live ctrl/meta+wheel zoom where zoom/scrollTop
+     * are adjusted imperatively before React commits the new zoom.
+     */
+    isZoomingRef?: React.MutableRefObject<boolean>;
 };
 
 export function usePageNavigator({
@@ -56,8 +63,18 @@ export function usePageNavigator({
     onViewingPageIdChange,
     ensureAround,
     preloadRadius = 2,
-    isProgrammaticScrollRef
+    isProgrammaticScrollRef,
+    isZoomingRef
 }: UsePageNavigatorArgs) {
+    // Zoom can change very frequently during ctrl/meta+wheel (especially on trackpads).
+    // If we include `zoom` in the scroll-listener effect dependencies, React will tear down and
+    // re-attach the listener on every zoom tick. That can cause visible flicker/jank because the
+    // anchor/viewing state briefly lags behind.
+    // Keep the listener stable and read the latest zoom from a ref instead.
+    const zoomRef = useRef(zoom);
+    useEffect(() => {
+        zoomRef.current = zoom;
+    }, [zoom]);
     // -------- Viewing (viewport) --------
     const [viewportAnchorIndex, setViewportAnchorIndex] = useState(0);
     // Separate "viewing" index for UX stability (dead-zone / hysteresis)
@@ -135,13 +152,16 @@ export function usePageNavigator({
         };
 
         const onScroll = () => {
+            if (isZoomingRef?.current) return;
             cancelAnimationFrame(raf);
             raf = requestAnimationFrame(() => {
+                if (isZoomingRef?.current) return;
                 const scrollTop = Math.max(0, rootEl.scrollTop - PADDING_PX);
                 const clientH = rootEl.clientHeight;
+                const z = zoomRef.current || 1;
 
                 // 1) Anchor index (perf / render window)
-                const y = (scrollTop + clientH * REF_RATIO) / zoom;
+                const y = (scrollTop + clientH * REF_RATIO) / z;
 
                 setViewportAnchorIndex((prev) => {
                     const n = pageMetrics.offsets.length;
@@ -178,8 +198,8 @@ export function usePageNavigator({
                     const n = pageMetrics.offsets.length;
                     if (n === 0) return 0;
 
-                    const y1 = (scrollTop + clientH * VIEW_ANCHOR_TOP) / zoom;
-                    const y2 = (scrollTop + clientH * VIEW_ANCHOR_BOTTOM) / zoom;
+                    const y1 = (scrollTop + clientH * VIEW_ANCHOR_TOP) / z;
+                    const y2 = (scrollTop + clientH * VIEW_ANCHOR_BOTTOM) / z;
 
                     let i = Math.max(0, Math.min(n - 1, prev));
                     const top = pageMetrics.offsets[i];
@@ -202,7 +222,7 @@ export function usePageNavigator({
             cancelAnimationFrame(raf);
             rootEl.removeEventListener("scroll", onScroll);
         };
-    }, [mode, rootEl, zoom, pageMetrics]);
+    }, [mode, rootEl, pageMetrics]);
 
     // -------- 2) When viewportAnchorIndex reaches forced target -> release forced --------
     const releaseProgrammatic = useCallback((cooldownMs = 120) => {

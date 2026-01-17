@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { MutableRefObject } from "react";
 
 export type VirtualWindowArgs = {
     rootEl: HTMLElement | null;
@@ -8,6 +9,13 @@ export type VirtualWindowArgs = {
     heights: number[]; // doc units
     zoom: number;
     paddingPx: number;
+
+    /**
+     * When true, suppress scroll-driven state updates.
+     * Useful during live ctrl/meta+wheel zoom where we mutate scrollTop and apply
+     * a transient CSS zoom factor imperatively.
+     */
+    isZoomingRef?: MutableRefObject<boolean>;
 
     anchorIndex: number;
     activeIndex: number;
@@ -69,6 +77,7 @@ export function useVirtualWindow({
     heights,
     zoom,
     paddingPx,
+    isZoomingRef,
     anchorIndex,
     activeIndex,
     overscanBasePages = 6,
@@ -111,6 +120,7 @@ export function useVirtualWindow({
         };
 
         const onScroll = () => {
+            if (isZoomingRef?.current) return;
             if (raf) return;
             raf = requestAnimationFrame(update);
         };
@@ -121,6 +131,7 @@ export function useVirtualWindow({
 
         // simple resize tracking
         const ro = new ResizeObserver(() => {
+            if (isZoomingRef?.current) return;
             update();
         });
         ro.observe(rootEl);

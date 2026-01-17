@@ -67,7 +67,8 @@ export function useScrollToPage({
 
             scrollAndLockToEl(el, behavior);
         },
-        [rootEl, pageRefs, scrollAndLockToEl]
+        // Include zoom/getPageTop/paddingTop so navigation stays correct after zoom changes.
+        [rootEl, pageRefs, scrollAndLockToEl, getPageTop, zoom, paddingTop, isProgrammaticScrollRef]
     );
 
     const registerPageRef = useCallback(
