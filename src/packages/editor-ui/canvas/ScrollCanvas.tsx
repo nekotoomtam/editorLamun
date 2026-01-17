@@ -37,6 +37,7 @@ export function ScrollCanvas(props: {
     scrollRootRef?: React.RefObject<HTMLElement | null>;
     onViewingPageIdChange?: (pageId: Id | null) => void;
     refHandle: React.Ref<CanvasNavigatorHandle> | null;
+    setZoom: (z: number) => void;
 }) {
     const {
         document,
@@ -50,14 +51,23 @@ export function ScrollCanvas(props: {
         scrollRootRef,
         onViewingPageIdChange,
         refHandle,
+        setZoom
     } = props;
 
 
     const prevZoomRef = useRef(zoom);
-    const rootEl = scrollRootRef?.current ?? null;
+    const [rootEl, setRootEl] = React.useState<HTMLElement | null>(null);
+
+    useEffect(() => {
+        setRootEl(scrollRootRef?.current ?? null);
+    }, [scrollRootRef]);
     const pageRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const pendingNavRef = useRef<Id | null>(null);
     const isProgrammaticScrollRef = useRef(false);
+
+    useEffect(() => {
+        if (!rootEl) setRootEl(scrollRootRef?.current ?? null);
+    }, [rootEl, scrollRootRef]);
 
 
     const indexById = React.useMemo(() => {
@@ -101,8 +111,7 @@ export function ScrollCanvas(props: {
     });
 
     useImperativeHandle(refHandle, () => ({ navigateToPage: nav.navigateToPage }), [nav.navigateToPage]);
-    const progTimerRef = useRef<number | null>(null);
-    // If a page was inserted via a GapSlot, navigate after it exists in `pages`.
+
     useEffect(() => {
         const id = pendingNavRef.current;
         if (!id) return;
@@ -114,35 +123,50 @@ export function ScrollCanvas(props: {
         });
     }, [pages, nav.navigateToPage]);
 
+    const zoomRef = useRef(zoom);
+    useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+
     useEffect(() => {
-        const el = scrollRootRef?.current ?? null;
+        const el = rootEl;
         if (!el) return;
 
         const prevZoom = prevZoomRef.current;
         if (prevZoom === zoom) return;
 
         const padding = CANVAS_CONFIG.paddingPx;
-
-        // จุดกลางจอใน "doc space" (unscaled)
-        const anchorDocY =
-            (el.scrollTop + el.clientHeight / 2 - padding) / prevZoom;
-
-        // แปลงกลับเป็น scrollTop ใหม่
-        const nextScrollTop =
-            anchorDocY * zoom + padding - el.clientHeight / 2;
+        const anchorDocY = (el.scrollTop + el.clientHeight / 2 - padding) / prevZoom;
+        const nextScrollTop = anchorDocY * zoom + padding - el.clientHeight / 2;
 
         isProgrammaticScrollRef.current = true;
         requestAnimationFrame(() => {
-            el.scrollTop = Math.max(0, Math.round(nextScrollTop));
-            if (progTimerRef.current) window.clearTimeout(progTimerRef.current);
-            progTimerRef.current = window.setTimeout(() => {
+            el.scrollTop = Math.max(0, nextScrollTop);
+            requestAnimationFrame(() => {
                 isProgrammaticScrollRef.current = false;
-                progTimerRef.current = null;
-            }, 120);
+            });
         });
 
         prevZoomRef.current = zoom;
-    }, [zoom, scrollRootRef]);
+    }, [zoom, rootEl]);
+
+    useEffect(() => {
+        const el = rootEl;
+        if (!el) return;
+
+        const onWheel = (e: WheelEvent) => {
+            if (!(e.ctrlKey || e.metaKey)) return;
+            e.preventDefault();
+            e.stopPropagation();
+
+            const prev = zoomRef.current;
+            const next = clamp(prev * zoomStepFromWheel(e.deltaY), 0.25, 3);
+            if (next === prev) return;
+
+            setZoom(next);
+        };
+
+        el.addEventListener("wheel", onWheel, { passive: false });
+        return () => el.removeEventListener("wheel", onWheel as any);
+    }, [rootEl, setZoom]);
 
 
     const anchorIndex = nav.anchorIndex;

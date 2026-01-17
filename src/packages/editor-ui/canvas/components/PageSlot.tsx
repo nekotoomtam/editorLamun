@@ -12,22 +12,25 @@ export function PageSlot(props: {
 
     return (
         <div
+            ref={(el) => registerRef(id, el)}
             style={{
                 width: width * zoom,
                 height: height * zoom,
                 position: "relative",
                 margin: "0 auto",
-                contain: "layout paint size", // ✅ ช่วย isolate งาน
+                contain: "layout paint size",
             }}
-            ref={(el) => registerRef(id, el)}
         >
             <div
                 style={{
-                    transform: `scale(${zoom})`,
-                    transformOrigin: "top left",
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
                     width,
                     height,
-                    willChange: "transform", // ✅
+                    transform: `scale(${zoom})`,
+                    transformOrigin: "top left",
+                    willChange: "transform",
                 }}
             >
                 {children}

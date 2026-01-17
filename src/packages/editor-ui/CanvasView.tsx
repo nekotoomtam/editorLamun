@@ -42,7 +42,7 @@ export const CanvasView = forwardRef<CanvasNavigatorHandle, CanvasViewProps>(
         },
         ref
     ) {
-        const { session, setActivePage } = useEditorSessionStore();
+        const { session, setActivePage, setZoom } = useEditorSessionStore();
         const activePageId = session.activePageId;
         const zoom = session.zoom || 1;
 
@@ -78,6 +78,7 @@ export const CanvasView = forwardRef<CanvasNavigatorHandle, CanvasViewProps>(
                     scrollRootRef={scrollRootRef}
                     onViewingPageIdChange={onViewingPageIdChange}
                     refHandle={ref}
+                    setZoom={(z) => setZoom(z)}
                 />
             );
         }

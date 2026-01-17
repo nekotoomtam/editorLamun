@@ -700,7 +700,7 @@ export function PageView({
                                 height: headerH,
 
                                 // จางมาก ไม่รบกวนสายตา
-                                background: "rgba(0,0,0,0.015)",
+                                /*   background: "rgba(0,0,0,0.015)", */
 
                                 // เน้นที่เส้น
                                 borderBottom: `1px solid ${isHeaderMode ? "rgba(59,130,246,0.65)" : "rgba(0,0,0,0.12)"
@@ -722,7 +722,7 @@ export function PageView({
                                 width: pageW,
                                 height: footerH,
 
-                                background: "rgba(0,0,0,0.015)",
+                                /*  background: "rgba(0,0,0,0.015)", */
 
                                 borderTop: `1px solid ${isFooterMode ? "rgba(59,130,246,0.65)" : "rgba(0,0,0,0.12)"
                                     }`,

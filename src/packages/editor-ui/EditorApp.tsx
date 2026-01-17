@@ -122,124 +122,12 @@ export function EditorApp() {
     const { session, setActivePage, setZoom, setEditingTarget } = useEditorSessionStore();
     const activePageId = session.activePageId;
     const zoom = session.zoom;
-    // ใส่ไว้ใน EditorApp()
-    const zoomRef = useRef(zoom);
-    const setZoomRef = useRef(setZoom);
-    useEffect(() => { zoomRef.current = zoom; }, [zoom]);
-    useEffect(() => { setZoomRef.current = setZoom; }, [setZoom]);
-
-    const zoomJobRef = useRef<null | {
-        contentX: number;
-        contentY: number;
-        vx: number;
-        vy: number;
-        nextZoom: number;
-    }>(null);
-
-    const zoomRafRef = useRef<number | null>(null);
-
-    function zoomStep(current: number, dir: "in" | "out") {
-        const step = dir === "in" ? 0.1 : -0.1;
-        const next = Number((current + step).toFixed(2));
-        return clamp(next, 0.25, 3);
-    }
 
     const canvasNavRef = useRef<CanvasNavigatorHandle | null>(null);
     const centerRef = useRef<HTMLDivElement | null>(null);
     const rootRef = useRef<HTMLDivElement | null>(null);
 
-    const scheduleZoom = React.useCallback((nextZoom: number) => {
-        if (nextZoom === zoomRef.current) return;
 
-        // อัปเดต ref ทันทีให้ event ถัดไปใช้ค่าล่าสุด
-        zoomRef.current = nextZoom;
-
-        // รวมงานด้วย rAF
-        if (zoomRafRef.current != null) return;
-        zoomRafRef.current = requestAnimationFrame(() => {
-            zoomRafRef.current = null;
-            setZoomRef.current(nextZoom);
-        });
-    }, []);
-
-    useEffect(() => {
-        const el = centerRef.current;
-        if (!el) return;
-
-        let raf: number | null = null;
-        let v = 0;
-
-        const WHEEL_GAIN = 0.15;
-        const MAX_V = 14;
-        const FRICTION = 0.88;
-
-        const isLikelyMouseWheel = (e: WheelEvent) => {
-            const dy = Math.abs(e.deltaY);
-            if (dy >= 50) return true;
-            if (e.deltaMode !== 0) return true;
-            return false;
-        };
-
-        const stopInertia = () => {
-            v = 0;
-            if (raf != null) {
-                cancelAnimationFrame(raf);
-                raf = null;
-            }
-        };
-
-        const tick = () => {
-            raf = null;
-            if (Math.abs(v) < 0.1) { v = 0; return; }
-            el.scrollTop += v;
-            v *= FRICTION;
-            raf = requestAnimationFrame(tick);
-        };
-
-        const onWheel = (e: WheelEvent) => {
-            if (e.ctrlKey || e.metaKey) {
-                stopInertia();
-                e.preventDefault();
-                e.stopPropagation();
-
-                const prev = zoomRef.current;
-                const dir: "in" | "out" = e.deltaY > 0 ? "out" : "in";
-                const next = zoomStep(prev, dir);
-
-                scheduleZoom(next);
-                return;
-            }
-
-            if (!isLikelyMouseWheel(e)) {
-                stopInertia();
-                return;
-            }
-
-            e.preventDefault();
-            const dyPx = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
-
-            v += dyPx * WHEEL_GAIN;
-            if (v > MAX_V) v = MAX_V;
-            if (v < -MAX_V) v = -MAX_V;
-
-            if (raf == null) raf = requestAnimationFrame(tick);
-        };
-
-        el.addEventListener("wheel", onWheel, { passive: false });
-        return () => {
-            el.removeEventListener("wheel", onWheel);
-            stopInertia();
-        };
-    }, [scheduleZoom]); // ✅ ไม่มี zoom/setZoom แล้ว
-
-    useEffect(() => {
-        return () => {
-            if (zoomRafRef.current != null) {
-                cancelAnimationFrame(zoomRafRef.current);
-                zoomRafRef.current = null;
-            }
-        };
-    }, []);
 
     const [leftW, setLeftW] = useState(240);
     const [rightW, setRightW] = useState(320);
