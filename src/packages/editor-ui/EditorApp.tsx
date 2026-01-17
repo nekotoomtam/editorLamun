@@ -11,82 +11,19 @@ import { AddPresetModal } from "./AddPresetModal";
 import type { Id } from "../editor-core/schema";
 import { computeLayout } from "../editor-renderer/layout/computeLayout";
 import { exportProofPdf } from "../editor-renderer/pdf/exportProofPdf";
+import { BottomBar, BOTTOM_BAR_HEIGHT } from "./components/BottomBar";
+import { TopRightActions } from "./components/TopRightActions";
+import type { EditingMode } from "./components/ModeSelector";
 
-function clamp(n: number, min: number, max: number) {
-    return Math.max(min, Math.min(max, n));
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+    const ab = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(ab).set(bytes);
+    return ab;
 }
 
-function ZoomBar({
-    zoom,
-    setZoom,
-    canUndo,
-    canRedo,
-    undo,
-    redo,
-    onExportPdf,
-}: {
-    zoom: number;
-    setZoom: (z: number) => void;
-    canUndo: boolean;
-    canRedo: boolean;
-    undo: () => void;
-    redo: () => void;
-    onExportPdf: () => void;
-}) {
-    return (
-        <div
-            style={{
-                display: "flex",
-                gap: 8,
-                alignItems: "center",
-                padding: "8px 10px",
-                borderRadius: 12,
-                border: "1px solid #e5e7eb",
-                background: "rgba(255,255,255,0.9)",
-                backdropFilter: "blur(6px)",
-                boxShadow: "0 10px 25px rgba(0,0,0,0.12)",
-                fontFamily: "system-ui",
-            }}
-        >
-            <button onClick={undo} disabled={!canUndo} title="Undo (Ctrl/Cmd+Z)">
-                Undo
-            </button>
-
-            <button onClick={redo} disabled={!canRedo} title="Redo (Ctrl/Cmd+Y / Shift+Ctrl/Cmd+Z)">
-                Redo
-            </button>
-
-            <div style={{ width: 1, height: 22, background: "#e5e7eb", margin: "0 4px" }} />
-            <button
-                onClick={() => setZoom(clamp(Number((zoom - 0.1).toFixed(2)), 0.25, 3))}
-            >
-                -
-            </button>
-
-            <div style={{ minWidth: 64, textAlign: "center", fontWeight: 600 }}>
-                {Math.round(zoom * 100)}%
-            </div>
-
-            <button
-                onClick={() => setZoom(clamp(Number((zoom + 0.1).toFixed(2)), 0.25, 3))}
-            >
-                +
-            </button>
-
-            <button onClick={() => setZoom(1)}>Reset</button>
-            <button onClick={onExportPdf}>
-                Export PDF
-            </button>
-        </div>
-    );
-}
 function downloadPdf(bytes: Uint8Array, filename = "proof.pdf") {
-    // ตัด slice ให้เป็น ArrayBuffer แท้ ๆ
-    const ab = bytes.buffer.slice(
-        bytes.byteOffset,
-        bytes.byteOffset + bytes.byteLength
-    );
-
+    const ab = toArrayBuffer(bytes);
     const blob = new Blob([ab], { type: "application/pdf" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -95,6 +32,7 @@ function downloadPdf(bytes: Uint8Array, filename = "proof.pdf") {
     a.click();
     URL.revokeObjectURL(url);
 }
+
 
 
 const MIN_LEFT = 260;
@@ -298,56 +236,14 @@ export function EditorApp() {
         setAddPresetOpen(true);
     };
 
-    function LayerBar({
-        value,
-        onChange,
-    }: {
-        value: "page" | "header" | "footer";
-        onChange: (v: "page" | "header" | "footer") => void;
-    }) {
-        const btn = (v: "page" | "header" | "footer", label: string) => {
-            const active = value === v;
-            return (
-                <button
-                    key={v}
-                    onClick={() => onChange(v)}
-                    style={{
-                        padding: "6px 10px",
-                        borderRadius: 10,
-                        border: "1px solid #e5e7eb",
-                        background: active ? "#111827" : "#ffffff",
-                        color: active ? "#ffffff" : "#111827",
-                        cursor: "pointer",
-                        fontSize: 12,
-                        fontWeight: 600,
-                    }}
-                >
-                    {label}
-                </button>
-            );
-        };
-
-        return (
-            <div
-                style={{
-                    display: "flex",
-                    gap: 8,
-                    alignItems: "center",
-                    padding: "8px 10px",
-                    borderRadius: 12,
-                    border: "1px solid #e5e7eb",
-                    background: "rgba(255,255,255,0.9)",
-                    backdropFilter: "blur(6px)",
-                    boxShadow: "0 10px 25px rgba(0,0,0,0.12)",
-                }}
-                title="Editing layer"
-            >
-                {btn("page", "Page")}
-                {btn("header", "Header")}
-                {btn("footer", "Footer")}
-            </div>
-        );
-    }
+    const totalPages = doc.pageOrder.length;
+    const currentPageNum = useMemo(() => {
+        if (totalPages === 0) return null;
+        const id = viewingPageId ?? activePageId;
+        if (!id) return null;
+        const idx = doc.pageOrder.indexOf(id);
+        return idx >= 0 ? idx + 1 : null;
+    }, [activePageId, doc.pageOrder, totalPages, viewingPageId]);
 
     const viewingRef = useRef<string | null>(viewingPageId);
     useEffect(() => { viewingRef.current = viewingPageId; }, [viewingPageId]);
@@ -363,12 +259,34 @@ export function EditorApp() {
         setViewingPageId(id);
     };
 
+    const onJumpToPage = (n: number) => {
+        if (totalPages === 0) return;
+        const clamped = Math.max(1, Math.min(totalPages, n));
+        const pageId = doc.pageOrder[clamped - 1];
+        if (!pageId) return;
+
+        setViewingPageId(pageId);
+        setActivePage(pageId); // ถ้าต้องการให้ active เปลี่ยนด้วย
+
+        requestAnimationFrame(() => {
+            canvasNavRef.current?.navigateToPage(pageId, { source: "canvas", behavior: "auto" });
+
+        });
+    };
 
     return (
 
         <div ref={rootRef} style={{ height: "100vh", overflow: "hidden", position: "relative" }}>
             <div style={{ position: "absolute", inset: 0, background: "#e5e7eb" }}>
-                <div ref={centerRef} style={{ height: "100%", overflow: "auto", padding: 16 }}>
+                <div
+                    ref={centerRef}
+                    style={{
+                        height: "100%",
+                        overflow: "auto",
+                        padding: 16,
+                        paddingBottom: 16 + BOTTOM_BAR_HEIGHT,
+                    }}
+                >
                     <CanvasView
                         ref={canvasNavRef}
                         document={doc}
@@ -380,10 +298,8 @@ export function EditorApp() {
 
                 </div>
 
-                <div style={{ position: "absolute", top: 12, right: rightW + 6 + 12, zIndex: 50 }}>
-                    <ZoomBar
-                        zoom={zoom}
-                        setZoom={setZoom}
+                <div style={{ position: "absolute", top: 12, right: rightW + 6 + 12, zIndex: 70 }}>
+                    <TopRightActions
                         canUndo={canUndo()}
                         canRedo={canRedo()}
                         undo={undo}
@@ -399,13 +315,21 @@ export function EditorApp() {
                             }
                         }}
                     />
-                    <LayerBar
-                        value={session.editingTarget ?? "page"}
-                        onChange={setEditingTarget}
-                    />
-
                 </div>
             </div>
+
+            <BottomBar
+                mode={(session.editingTarget ?? "page") as EditingMode}
+                onChangeMode={(m) => setEditingTarget(m)}
+                zoom={zoom}
+                setZoom={setZoom}
+                currentPage={currentPageNum}
+                totalPages={totalPages}
+                onJumpToPage={onJumpToPage}
+                leftOffset={leftW}
+                rightOffset={rightW}
+
+            />
 
             {/* Left overlay */}
             <div

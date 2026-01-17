@@ -1,4 +1,4 @@
-import React, { useEffect, useImperativeHandle, useLayoutEffect, useRef } from "react";
+import React, { useEffect, useImperativeHandle, useRef } from "react";
 
 import type { DocumentJson, Id, PageJson } from "../../editor-core/schema";
 
@@ -127,12 +127,6 @@ export function ScrollCanvas(props: {
     const zoomWheelDeltaAccRef = useRef(0);
     const zoomWheelClientYRef = useRef<number | null>(null);
     const zoomWheelRafRef = useRef<number | null>(null);
-
-    // When zoom changes (by wheel or buttons), we adjust scrollTop so the same document point stays under the anchor.
-    // - Wheel: anchor = cursor Y
-    // - Buttons/reset: anchor = viewport center
-    const pendingZoomAnchorRef = useRef<null | { prev: number; baseScrollTop: number; anchorY: number }>(null);
-    const prevZoomAppliedRef = useRef(zoom);
     useEffect(() => { zoomRef.current = zoom; }, [zoom]);
 
     useEffect(() => {
@@ -200,12 +194,11 @@ export function ScrollCanvas(props: {
                         const clientY = zoomWheelClientYRef.current ?? (rect.top + rect.height / 2);
                         const anchorY = clamp(clientY - rect.top, 0, rect.height);
 
-                        // Keep the document point under the cursor stable (account for canvas padding).
-                        pendingZoomAnchorRef.current = {
-                            prev,
-                            baseScrollTop: el.scrollTop,
-                            anchorY,
-                        };
+                        // Keep the document point under the cursor stable.
+                        const PAD = CANVAS_CONFIG.paddingPx; // (ถ้ามี outer padding อีก ก็ต้องรวมด้วย)
+                        const docY = (el.scrollTop + anchorY - PAD) / prev;
+                        el.scrollTop = docY * next - anchorY + PAD;
+
 
                         setZoom(next);
                     });
@@ -244,46 +237,6 @@ export function ScrollCanvas(props: {
             zoomWheelClientYRef.current = null;
         };
     }, [rootEl, setZoom]);
-
-
-    // Apply anchored scrollTop adjustment whenever zoom changes (wheel, +/- buttons, reset, etc.).
-    useLayoutEffect(() => {
-        const el = rootEl;
-        if (!el) {
-            prevZoomAppliedRef.current = zoom;
-            pendingZoomAnchorRef.current = null;
-            return;
-        }
-
-        const prev = prevZoomAppliedRef.current;
-        const next = zoom;
-        if (!Number.isFinite(prev) || prev <= 0 || prev === next) {
-            prevZoomAppliedRef.current = next;
-            pendingZoomAnchorRef.current = null;
-            return;
-        }
-
-        const pad = CANVAS_CONFIG.paddingPx;
-        const pending = pendingZoomAnchorRef.current;
-        const anchorY = pending?.anchorY ?? (el.clientHeight / 2);
-        const baseScrollTop = pending?.baseScrollTop ?? el.scrollTop;
-
-        // Convert viewport anchor to document-space Y (origin = top of first page, i.e. after padding).
-        const docY = (baseScrollTop + anchorY - pad) / prev;
-        let newScrollTop = docY * next - anchorY + pad;
-
-        const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
-        if (!Number.isFinite(newScrollTop)) {
-            // noop
-        } else {
-            if (newScrollTop < 0) newScrollTop = 0;
-            if (newScrollTop > maxScroll) newScrollTop = maxScroll;
-            el.scrollTop = newScrollTop;
-        }
-
-        pendingZoomAnchorRef.current = null;
-        prevZoomAppliedRef.current = next;
-    }, [zoom, rootEl]);
 
 
     // IMPORTANT: Do not add another ctrl/meta wheel listener here.
