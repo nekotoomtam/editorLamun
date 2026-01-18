@@ -68,6 +68,7 @@ type DocStore = {
     setPresetFooterHeightPx: (presetId: Id, heightPx: number) => void;
     setPageHeaderFooterHidden: (pageId: Id, patch: { headerHidden?: boolean; footerHidden?: boolean }) => void;
     updateRepeatAreaHeightPx: (presetId: Id, kind: "header" | "footer", heightPx: number) => void;
+    updateRepeatAreaAnchorToMargins: (presetId: Id, kind: "header" | "footer", anchorToMargins: boolean) => void;
 };
 
 const SessionCtx = createContext<SessionOnlyStore | null>(null);
@@ -167,6 +168,7 @@ export function EditorStoreProvider({
             setPresetFooterHeightPx: hfActions.setPresetFooterHeightPx,
             setPageHeaderFooterHidden: hfActions.setPageHeaderFooterHidden,
             updateRepeatAreaHeightPx: hfActions.updateRepeatAreaHeightPx,
+            updateRepeatAreaAnchorToMargins: hfActions.updateRepeatAreaAnchorToMargins,
         };
     }, [doc, history, docHistory, pagesActions, presetsActions, hfActions]);
 

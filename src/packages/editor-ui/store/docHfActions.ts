@@ -7,17 +7,13 @@ export function createDocHfActions(args: { applyDoc: ApplyDoc }) {
     const { applyDoc } = args;
 
     function setPresetHeaderHeightPx(presetId: Id, heightPx: number) {
-        applyDoc((draft) => {
-            const hf = Cmd.ensureHFCloneForPreset(draft, presetId);
-            hf.header.heightPx = heightPx;
-        });
+        // ✅ Always clamp via core rule to prevent invalid states.
+        updateRepeatAreaHeightPx(presetId, "header", heightPx);
     }
 
     function setPresetFooterHeightPx(presetId: Id, heightPx: number) {
-        applyDoc((draft) => {
-            const hf = Cmd.ensureHFCloneForPreset(draft, presetId);
-            hf.footer.heightPx = heightPx;
-        });
+        // ✅ Always clamp via core rule to prevent invalid states.
+        updateRepeatAreaHeightPx(presetId, "footer", heightPx);
     }
 
     function setPageHeaderFooterHidden(pageId: Id, patch: { headerHidden?: boolean; footerHidden?: boolean }) {
@@ -38,10 +34,17 @@ export function createDocHfActions(args: { applyDoc: ApplyDoc }) {
         });
     }
 
+    function updateRepeatAreaAnchorToMargins(presetId: Id, kind: "header" | "footer", anchorToMargins: boolean) {
+        applyDoc((draft) => {
+            Cmd.setRepeatAreaAnchorToMargins(draft, presetId, kind, anchorToMargins);
+        });
+    }
+
     return {
         setPresetHeaderHeightPx,
         setPresetFooterHeightPx,
         setPageHeaderFooterHidden,
         updateRepeatAreaHeightPx,
+        updateRepeatAreaAnchorToMargins,
     };
 }

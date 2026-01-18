@@ -87,6 +87,8 @@ export function PageView({
     const hf = useMemo(() => Sel.getEffectiveHeaderFooterHeights(document, page.id), [document.headerFooterByPresetId, page.id, page.presetId, page.headerHidden, page.footerHidden]);
     const headerH = previewHeaderH ?? hf.headerH;
     const footerH = previewFooterH ?? hf.footerH;
+    const headerAnchorToMargins = hf.headerAnchorToMargins;
+    const footerAnchorToMargins = hf.footerAnchorToMargins;
 
     const hfRef = useRef(hf);
     useEffect(() => { hfRef.current = hf; }, [hf]);
@@ -153,8 +155,10 @@ export function PageView({
             margin,
             headerH,
             footerH,
+            headerAnchorToMargins,
+            footerAnchorToMargins,
         });
-    }, [pageW, pageH, margin, headerH, footerH]);
+    }, [pageW, pageH, margin, headerH, footerH, headerAnchorToMargins, footerAnchorToMargins]);
 
     const content = rects.bodyRect;
 
@@ -173,16 +177,19 @@ export function PageView({
         startPagePt: { px: number; py: number };
         startMargin: PagePreset["margin"];
         pageW: number;
-        bodyH: number;
+        pageH: number;
         pointerId: number;
     }>(null);
 
     function clampHeader(nextHeaderH: number, footerH: number, pageH: number) {
         const z = hfZoneRef.current;
+        const m = previewMarginRef.current ?? baseMargin;
+        const contentH = Math.max(0, pageH - Math.max(0, m.top) - Math.max(0, m.bottom));
         return Cmd.clampRepeatAreaHeightPx({
             kind: "header",
             desiredPx: nextHeaderH,
             pageH,
+            contentH,
             otherPx: footerH,
             areaMinPx: z?.header?.minHeightPx,
             areaMaxPx: z?.header?.maxHeightPx,
@@ -191,10 +198,13 @@ export function PageView({
 
     function clampFooter(nextFooterH: number, headerH: number, pageH: number) {
         const z = hfZoneRef.current;
+        const m = previewMarginRef.current ?? baseMargin;
+        const contentH = Math.max(0, pageH - Math.max(0, m.top) - Math.max(0, m.bottom));
         return Cmd.clampRepeatAreaHeightPx({
             kind: "footer",
             desiredPx: nextFooterH,
             pageH,
+            contentH,
             otherPx: headerH,
             areaMinPx: z?.footer?.minHeightPx,
             areaMaxPx: z?.footer?.maxHeightPx,
@@ -228,7 +238,7 @@ export function PageView({
         dy: number,
         shift: boolean,
         pageW: number,
-        bodyH: number
+        pageH: number
     )
         : { margin: PagePreset["margin"]; hitLimit: boolean } {
         let next = { ...start };
@@ -275,13 +285,13 @@ export function PageView({
             const delta = side === "top" ? dy : -dy;
 
             const clampTop = (v: number, bottomFixed: number) => {
-                const max = bodyH - bottomFixed - MIN_CONTENT_H;
+            const max = pageH - bottomFixed - MIN_CONTENT_H;
                 const c = clamp(v, 0, max);
                 if (c !== v) hitLimit = true;
                 return c;
             };
             const clampBottom = (v: number, topFixed: number) => {
-                const max = bodyH - topFixed - MIN_CONTENT_H;
+            const max = pageH - topFixed - MIN_CONTENT_H;
                 const c = clamp(v, 0, max);
                 if (c !== v) hitLimit = true;
                 return c;
@@ -294,7 +304,7 @@ export function PageView({
             }
 
             const wanted = delta;
-            const maxPos = (bodyH - MIN_CONTENT_H - (start.top + start.bottom)) / 2;
+            const maxPos = (pageH - MIN_CONTENT_H - (start.top + start.bottom)) / 2;
             const maxNeg = Math.max(-start.top, -start.bottom);
             const d = clamp(wanted, maxNeg, maxPos);
             if (d !== wanted) hitLimit = true;
@@ -316,8 +326,8 @@ export function PageView({
         const ph = pageHRef.current;
 
         const { px, py } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
-        const nearHeaderBottom = headerH > 0 && Math.abs(py - headerH) <= HF_HIT;
-        const nearFooterTop = footerH > 0 && Math.abs(py - (pageH - footerH)) <= HF_HIT;
+        const nearHeaderBottom = headerH > 0 && Math.abs(py - rects.lines.headerBottomY) <= HF_HIT;
+        const nearFooterTop = footerH > 0 && Math.abs(py - rects.lines.footerTopY) <= HF_HIT;
 
         if (nearHeaderBottom || nearFooterTop) {
             setHoverSide(null); // ไม่ให้ไปชนกับ drag margin
@@ -353,8 +363,8 @@ export function PageView({
 
         const { py } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
 
-        const nearHeaderBottom = headerH > 0 && Math.abs(py - headerH) <= HF_HIT;
-        const nearFooterTop = footerH > 0 && Math.abs(py - (pageH - footerH)) <= HF_HIT;
+        const nearHeaderBottom = headerH > 0 && Math.abs(py - rects.lines.headerBottomY) <= HF_HIT;
+        const nearFooterTop = footerH > 0 && Math.abs(py - rects.lines.footerTopY) <= HF_HIT;
 
         // ✅ 1) handle header/footer resize ก่อน
 
@@ -395,7 +405,7 @@ export function PageView({
             })(),
             startMargin: baseMargin,
             pageW: preset.size.width,
-            bodyH: rects.bodyH,
+            pageH,
             pointerId: e.pointerId
         };
 
@@ -444,7 +454,7 @@ export function PageView({
             const { dx, dy } = clientToPageDelta(ctx.startPagePt, cur);
             const shift = ev.shiftKey;
 
-            const result = applyDrag(ctx.side, ctx.startMargin, dx, dy, shift, ctx.pageW, ctx.bodyH);
+            const result = applyDrag(ctx.side, ctx.startMargin, dx, dy, shift, ctx.pageW, ctx.pageH);
             setPreviewMargin(result.margin);
             setLimitSide(result.hitLimit ? ctx.side : null);
         }
@@ -564,8 +574,8 @@ export function PageView({
         return Math.round(yDoc * z) / z;
     };
 
-    const headerLineY = headerH > 0 ? snapDocY(headerH) : null;
-    const footerLineY = footerH > 0 ? snapDocY(pageH - footerH) : null;
+    const headerLineY = headerH > 0 ? snapDocY(rects.lines.headerBottomY) : null;
+    const footerLineY = footerH > 0 ? snapDocY(rects.lines.footerTopY) : null;
 
 
     return (
@@ -604,11 +614,11 @@ export function PageView({
                 const ph = pageHRef.current;
                 const { py } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
 
-                if (headerH > 0 && py >= 0 && py <= headerH) {
+                if (headerH > 0 && py >= rects.headerRect.y && py <= (rects.headerRect.y + headerH)) {
                     setEditingTarget("header");
                     return;
                 }
-                if (footerH > 0 && py >= pageH - footerH && py <= pageH) {
+                if (footerH > 0 && py >= rects.footerRect.y && py <= (rects.footerRect.y + footerH)) {
                     setEditingTarget("footer");
                     return;
                 }
@@ -624,8 +634,8 @@ export function PageView({
                 const ph = pageHRef.current;
                 const { py } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
 
-                const inHeader = headerH > 0 && py >= 0 && py <= headerH;
-                const inFooter = footerH > 0 && py >= pageH - footerH && py <= pageH;
+                const inHeader = headerH > 0 && py >= rects.headerRect.y && py <= (rects.headerRect.y + headerH);
+                const inFooter = footerH > 0 && py >= rects.footerRect.y && py <= (rects.footerRect.y + footerH);
 
                 if (editingTarget === "header" && !inHeader) setEditingTarget("page");
                 if (editingTarget === "footer" && !inFooter) setEditingTarget("page");
@@ -756,14 +766,24 @@ export function PageView({
                 <>
                     {/* ===== Header zone ===== */}
                     {headerH > 0 && (
-                        <div style={{ position: "absolute", left: 0, top: 0, width: pageW, height: headerH, pointerEvents: "none", zIndex: 2 }} />
+                        <div
+                            style={{
+                                position: "absolute",
+                                left: rects.contentRect.x,
+                                top: rects.headerRect.y,
+                                width: rects.contentRect.w,
+                                height: headerH,
+                                pointerEvents: "none",
+                                zIndex: 2,
+                            }}
+                        />
                     )}
                     {headerLineY != null && (
                         <div style={{
                             position: "absolute",
-                            left: 0,
+                            left: rects.contentRect.x,
                             top: headerLineY,
-                            width: pageW,
+                            width: rects.contentRect.w,
                             height: hairline,
                             background: isHeaderMode ? "rgba(59,130,246,0.65)" : "rgba(0,0,0,0.12)",
                             pointerEvents: "none",
@@ -775,9 +795,9 @@ export function PageView({
                         <div
                             style={{
                                 position: "absolute",
-                                left: 0,
-                                top: pageH - footerH,
-                                width: pageW,
+                                left: rects.contentRect.x,
+                                top: rects.footerRect.y,
+                                width: rects.contentRect.w,
                                 height: footerH,
                                 pointerEvents: "none",
                                 zIndex: 2,
@@ -788,9 +808,9 @@ export function PageView({
                         <div
                             style={{
                                 position: "absolute",
-                                left: 0,
+                                left: rects.contentRect.x,
                                 top: footerLineY,
-                                width: pageW,
+                                width: rects.contentRect.w,
                                 height: hairline,
                                 background: isFooterMode ? "rgba(59,130,246,0.65)" : "rgba(0,0,0,0.12)",
                                 pointerEvents: "none",
@@ -806,8 +826,8 @@ export function PageView({
                         <div
                             style={{
                                 position: "absolute",
-                                left: 12,
-                                top: 8,
+                                left: rects.contentRect.x + 12,
+                                top: rects.headerRect.y + 8,
                                 padding: "3px 8px",
                                 borderRadius: 999,
                                 background: "rgba(59,130,246,0.85)",
@@ -826,8 +846,8 @@ export function PageView({
                         <div
                             style={{
                                 position: "absolute",
-                                left: 12,
-                                top: pageH - footerH + 8,
+                                left: rects.contentRect.x + 12,
+                                top: rects.footerRect.y + 8,
                                 padding: "3px 8px",
                                 borderRadius: 999,
                                 background: "rgba(59,130,246,0.85)",
@@ -846,17 +866,17 @@ export function PageView({
                 <>
                     {/* Header nodes */}
                     {headerNodes.map((n) => (
-                        <NodeView key={n.id} doc={document} node={n} offsetX={0} offsetY={0} />
+                        <NodeView key={n.id} doc={document} node={n} offsetX={rects.contentRect.x} offsetY={rects.headerRect.y} />
                     ))}
 
                     {/* Page (body) nodes */}
                     {nodes.map((n) => (
-                        <NodeView key={n.id} doc={document} node={n} offsetX={0} offsetY={headerH} />
+                        <NodeView key={n.id} doc={document} node={n} offsetX={rects.contentRect.x} offsetY={rects.bodyRect.y} />
                     ))}
 
                     {/* Footer nodes */}
                     {footerNodes.map((n) => (
-                        <NodeView key={n.id} doc={document} node={n} offsetX={0} offsetY={pageH - footerH} />
+                        <NodeView key={n.id} doc={document} node={n} offsetX={rects.contentRect.x} offsetY={rects.footerRect.y} />
                     ))}
                 </>
             )}

@@ -27,9 +27,9 @@ export function getEffectiveMargin(doc: DocumentJson, pageId: Id) {
 }
 
 export function getContentRect(doc: DocumentJson, pageId: Id) {
-    const r = getBodyContentRect(doc, pageId);
-    if (!r) return null;
-    const { x, y, w, h } = r;
+    const m = getEffectivePageMetrics(doc, pageId);
+    if (!m) return null;
+    const { x, y, w, h } = m.contentRect;
     return { x, y, w, h };
 }
 
@@ -60,23 +60,28 @@ export function getHeaderFooterZone(doc: DocumentJson, presetId: Id) {
     return hf;
 }
 
-export function getEffectiveHeaderFooterHeights(doc: DocumentJson, pageId: Id) {
+export function getEffectiveHeaderFooterHeights(doc: DocumentJson, pageId: Id): { headerH: number; footerH: number; headerAnchorToMargins: boolean; footerAnchorToMargins: boolean } {
     const page = doc.pagesById?.[pageId];
-    if (!page) return { headerH: 0, footerH: 0 };
+    if (!page) return { headerH: 0, footerH: 0, headerAnchorToMargins: true, footerAnchorToMargins: true };
 
     const hf = doc.headerFooterByPresetId?.[page.presetId];
-    if (!hf) return { headerH: 0, footerH: 0 };
+    if (!hf) return { headerH: 0, footerH: 0, headerAnchorToMargins: true, footerAnchorToMargins: true };
 
     const headerH = page.headerHidden ? 0 : (hf.header?.heightPx ?? 0);
     const footerH = page.footerHidden ? 0 : (hf.footer?.heightPx ?? 0);
 
-    return { headerH, footerH };
+    return {
+        headerH,
+        footerH,
+        headerAnchorToMargins: hf.header?.anchorToMargins ?? true,
+        footerAnchorToMargins: hf.footer?.anchorToMargins ?? true,
+    };
 }
 
 
 /**
- * content rect ของ BODY (margin เป็นของ body เท่านั้น)
- * layout = header -> body(margin) -> footer
+ * rect ของ BODY content (ภายใน content area = หลังหัก margin บน/ล่าง)
+ * layout = contentArea: [header band] -> [body] -> [footer band]
  */
 export function getBodyContentRect(doc: DocumentJson, pageId: Id) {
     const m = getEffectivePageMetrics(doc, pageId);
@@ -96,7 +101,7 @@ export function getEffectivePageMetrics(doc: DocumentJson, pageId: Id) {
     const margin = getEffectiveMargin(doc, pageId);
     if (!margin) return null;
 
-    const { headerH, footerH } = getEffectiveHeaderFooterHeights(doc, pageId);
+    const { headerH, footerH, headerAnchorToMargins, footerAnchorToMargins } = getEffectiveHeaderFooterHeights(doc, pageId);
 
     const pageW = preset.size.width;
     const pageH = preset.size.height;
@@ -107,8 +112,25 @@ export function getEffectivePageMetrics(doc: DocumentJson, pageId: Id) {
         margin,
         headerH,
         footerH,
+        headerAnchorToMargins,
+        footerAnchorToMargins,
     });
 
-    return { page, preset, margin, headerH, footerH, pageW, pageH, bodyH: rects.bodyH, bodyRect: rects.bodyRect, lines: rects.lines };
+    return {
+        page,
+        preset,
+        margin,
+        headerH,
+        footerH,
+        headerAnchorToMargins,
+        footerAnchorToMargins,
+        pageW,
+        pageH,
+        contentRect: rects.contentRect,
+        bodyRect: rects.bodyRect,
+        headerRect: rects.headerRect,
+        footerRect: rects.footerRect,
+        lines: rects.lines,
+    };
 }
 

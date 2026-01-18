@@ -5,7 +5,7 @@ export type HeaderFooterConstraints = {
     maxHeaderPct: number;
     /** footer สูงสุดเป็น % ของ pageH */
     maxFooterPct: number;
-    /** ต้องเหลือ body อย่างน้อย (รวม margin) เท่าไหร่ */
+    /** ต้องเหลือ body (ภายใน content area = หลังหัก margin บน/ล่าง) อย่างน้อยเท่าไหร่ */
     minBodyPx: number;
     minHeaderPx: number;
     minFooterPx: number;
@@ -23,6 +23,8 @@ export function clampRepeatAreaHeightPx(args: {
     kind: "header" | "footer";
     desiredPx: number;
     pageH: number;
+    /** contentH = pageH - marginTop - marginBottom (optional; fallback = pageH) */
+    contentH?: number;
     otherPx: number;
     areaMinPx?: number;
     areaMaxPx?: number;
@@ -30,16 +32,20 @@ export function clampRepeatAreaHeightPx(args: {
 }) {
     const c = { ...DEFAULT_HF_CONSTRAINTS, ...(args.constraints ?? {}) };
     const pageH = args.pageH;
+    const contentH = Math.max(0, args.contentH ?? pageH);
     const otherPx = Math.max(0, args.otherPx);
     const desiredPx = args.desiredPx;
 
-    const maxByBody = pageH - otherPx - c.minBodyPx;
+    // ✅ Rule: header/footer may grow/shrink freely, but must leave body at least minBodyPx
+    // inside the content area (pageH after subtracting top/bottom margins).
+    const maxByBody = contentH - otherPx - c.minBodyPx;
     const maxByPct = pageH * (args.kind === "header" ? c.maxHeaderPct : c.maxFooterPct);
 
     const areaMax = args.areaMaxPx ?? Infinity;
     const areaMin = Math.max(args.areaMinPx ?? 0, args.kind === "header" ? c.minHeaderPx : c.minFooterPx);
 
-    const max = Math.min(areaMax, maxByPct, maxByBody);
+    const maxRaw = Math.min(areaMax, maxByPct, maxByBody);
+    const max = Math.max(0, maxRaw);
     const clamped = Math.max(areaMin, Math.min(max, Math.round(desiredPx)));
 
     return clamped;
@@ -57,6 +63,9 @@ export function clampRepeatAreaHeightPxForPreset(doc: DocumentJson, presetId: Id
     const footer = hf.footer;
 
     const pageH = preset.size.height;
+    const marginTop = Math.max(0, preset.margin?.top ?? 0);
+    const marginBottom = Math.max(0, preset.margin?.bottom ?? 0);
+    const contentH = Math.max(0, pageH - marginTop - marginBottom);
     const otherPx = kind === "header" ? (footer.heightPx ?? 0) : (header.heightPx ?? 0);
     const area = kind === "header" ? header : footer;
 
@@ -64,6 +73,7 @@ export function clampRepeatAreaHeightPxForPreset(doc: DocumentJson, presetId: Id
         kind,
         desiredPx,
         pageH,
+        contentH,
         otherPx,
         areaMinPx: area.minHeightPx,
         areaMaxPx: area.maxHeightPx,
@@ -81,12 +91,14 @@ export function ensureHeaderFooter(doc: DocumentJson, presetId: Id) {
                 // Default: match current UI expectations.
                 // If you need legacy behavior (0 height), migrate at load time.
                 heightPx: 100,
+                anchorToMargins: true,
                 nodeOrder: [],
             },
             footer: {
                 id: `hf-${presetId}-footer`,
                 name: "Footer",
                 heightPx: 80,
+                anchorToMargins: true,
                 nodeOrder: [],
             },
         };
@@ -105,4 +117,21 @@ export function ensureHFCloneForPreset(doc: DocumentJson, presetId: Id) {
     };
 
     return doc.headerFooterByPresetId![presetId]!;
+}
+
+/**
+ * Update anchorToMargins for header/footer (per preset).
+ * - Always clone the preset HF object before mutating.
+ * - Re-clamp current heights to keep invariants.
+ */
+export function setRepeatAreaAnchorToMargins(doc: DocumentJson, presetId: Id, kind: "header" | "footer", anchor: boolean) {
+    const hf = ensureHFCloneForPreset(doc, presetId);
+    if (kind === "header") {
+        hf.header.anchorToMargins = anchor;
+        hf.header.heightPx = clampRepeatAreaHeightPxForPreset(doc, presetId, "header", hf.header.heightPx ?? 0);
+    } else {
+        hf.footer.anchorToMargins = anchor;
+        hf.footer.heightPx = clampRepeatAreaHeightPxForPreset(doc, presetId, "footer", hf.footer.heightPx ?? 0);
+    }
+    return hf;
 }

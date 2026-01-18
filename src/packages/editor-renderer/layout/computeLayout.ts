@@ -13,9 +13,10 @@ export function computeLayout(document: DocumentJson): DocumentLayout {
         target: "page" | "header" | "footer";
         nodeOrder: Id[];
         nodesById: Record<Id, NodeJson>;
+        offsetX: number;
         offsetY: number;
     }): LayoutNode[] => {
-        const { target, nodeOrder, nodesById, offsetY } = args;
+        const { target, nodeOrder, nodesById, offsetX, offsetY } = args;
 
         return nodeOrder
             .map((id) => nodesById[id])
@@ -24,7 +25,7 @@ export function computeLayout(document: DocumentJson): DocumentLayout {
                 id: n.id,
                 type: n.type,
                 target,
-                x: n.x ?? 0,
+                x: (n.x ?? 0) + offsetX,
                 y: (n.y ?? 0) + offsetY,
                 w: n.w ?? 0,
                 h: n.h ?? 0,
@@ -55,14 +56,16 @@ export function computeLayout(document: DocumentJson): DocumentLayout {
                 target: "page",
                 nodeOrder: pageTarget.nodeOrder,
                 nodesById: pageTarget.nodesById,
-                offsetY: 0,
+                offsetX: m.contentRect?.x ?? 0,
+                offsetY: m.bodyRect?.y ?? 0,
             }),
             ...(m.headerH > 0
                 ? toLayoutNodes({
                     target: "header",
                     nodeOrder: headerTarget.nodeOrder,
                     nodesById: headerTarget.nodesById,
-                    offsetY: 0,
+                    offsetX: m.contentRect?.x ?? 0,
+                    offsetY: m.headerRect?.y ?? 0,
                 })
                 : []),
             ...(m.footerH > 0
@@ -70,7 +73,8 @@ export function computeLayout(document: DocumentJson): DocumentLayout {
                     target: "footer",
                     nodeOrder: footerTarget.nodeOrder,
                     nodesById: footerTarget.nodesById,
-                    offsetY: m.pageH - m.footerH,
+                    offsetX: m.contentRect?.x ?? 0,
+                    offsetY: m.footerRect?.y ?? (m.pageH - m.footerH),
                 })
                 : []),
         ];

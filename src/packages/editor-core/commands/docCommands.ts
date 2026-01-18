@@ -9,6 +9,7 @@ export {
     ensureHFCloneForPreset,
     clampRepeatAreaHeightPx,
     clampRepeatAreaHeightPxForPreset,
+    setRepeatAreaAnchorToMargins,
     DEFAULT_HF_CONSTRAINTS,
 } from "./headerFooter";
 

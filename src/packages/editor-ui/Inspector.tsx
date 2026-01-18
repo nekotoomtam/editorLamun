@@ -94,8 +94,8 @@ export function Inspector({
         // ✅ NEW
         setPageMarginSource,
         updatePageMargin,
-        setPresetHeaderHeightPx,
-        setPresetFooterHeightPx,
+        updateRepeatAreaHeightPx,
+        updateRepeatAreaAnchorToMargins,
         setPageHeaderFooterHidden,
     } = useEditorStore();
 
@@ -343,19 +343,21 @@ export function Inspector({
                     const hf = doc.headerFooterByPresetId?.[preset.id];
                     const headerPx = hf?.header?.heightPx ?? 0;
                     const footerPx = hf?.footer?.heightPx ?? 0;
+                    const headerAnchor = hf?.header?.anchorToMargins ?? true;
+                    const footerAnchor = hf?.footer?.anchorToMargins ?? true;
 
                     const headerEnabled = headerPx > 0;
                     const footerEnabled = footerPx > 0;
 
                     const setHeaderEnabled = (on: boolean) => {
                         // เปิด = default 100, ปิด = 0
-                        setPresetHeaderHeightPx(preset.id, on ? (headerPx || 100) : 0);
+                        updateRepeatAreaHeightPx(preset.id, "header", on ? (headerPx || 100) : 0);
                         // ถ้าปิด preset ก็เคลียร์ hide ของ page ให้กลับมาเป็น false จะได้ไม่งง
                         if (!on) setPageHeaderFooterHidden(page.id, { headerHidden: false });
                     };
 
                     const setFooterEnabled = (on: boolean) => {
-                        setPresetFooterHeightPx(preset.id, on ? (footerPx || 80) : 0);
+                        updateRepeatAreaHeightPx(preset.id, "footer", on ? (footerPx || 80) : 0);
                         if (!on) setPageHeaderFooterHidden(page.id, { footerHidden: false });
                     };
 
@@ -379,7 +381,7 @@ export function Inspector({
                                             type="number"
                                             value={headerPx}
                                             min={0}
-                                            onChange={(e) => setPresetHeaderHeightPx(preset.id, clampInt(Number(e.target.value), 0, 600))}
+                                            onChange={(e) => updateRepeatAreaHeightPx(preset.id, "header", clampInt(Number(e.target.value), 0, 600))}
                                             style={{
                                                 width: "100%",
                                                 padding: "6px 8px",
@@ -387,6 +389,17 @@ export function Inspector({
                                                 border: "1px solid #e5e7eb",
                                             }}
                                         />
+                                    </FieldRow>
+
+                                    <FieldRow label="Anchor">
+                                        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={headerAnchor}
+                                                onChange={(e) => updateRepeatAreaAnchorToMargins(preset.id, "header", e.target.checked)}
+                                            />
+                                            <span style={{ fontSize: 12, color: "#374151" }}>Anchor to margins</span>
+                                        </label>
                                     </FieldRow>
 
                                     <FieldRow label="This page">
@@ -422,7 +435,7 @@ export function Inspector({
                                             type="number"
                                             value={footerPx}
                                             min={0}
-                                            onChange={(e) => setPresetFooterHeightPx(preset.id, clampInt(Number(e.target.value), 0, 600))}
+                                            onChange={(e) => updateRepeatAreaHeightPx(preset.id, "footer", clampInt(Number(e.target.value), 0, 600))}
                                             style={{
                                                 width: "100%",
                                                 padding: "6px 8px",
@@ -430,6 +443,17 @@ export function Inspector({
                                                 border: "1px solid #e5e7eb",
                                             }}
                                         />
+                                    </FieldRow>
+
+                                    <FieldRow label="Anchor">
+                                        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={footerAnchor}
+                                                onChange={(e) => updateRepeatAreaAnchorToMargins(preset.id, "footer", e.target.checked)}
+                                            />
+                                            <span style={{ fontSize: 12, color: "#374151" }}>Anchor to margins</span>
+                                        </label>
                                     </FieldRow>
 
                                     <FieldRow label="This page">

@@ -38,6 +38,15 @@ export type RepeatArea = {
     id: Id;
     name?: string;
     heightPx: number;        // ใช้จริง
+    /**
+     * ถ้า true: วาง repeat area อิงภายใต้ margin (content area)
+     * - header: เริ่มที่ marginTop
+     * - footer: จบที่ pageH - marginBottom
+     * ถ้า false: วางอิงขอบกระดาษ (y=0 / y=pageH-h)
+     *
+     * NOTE: กฎ constraint (min body) ยังใช้ content area เหมือนเดิม
+     */
+    anchorToMargins?: boolean;
     minHeightPx?: number;    // clamp
     maxHeightPx?: number;    // clamp
     /**
