@@ -4,10 +4,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import type { DocumentJson, Id, PagePreset } from "../editor-core/schema";
 
 const PAPER_PRESETS = [
-    { key: "A4", name: "A4", w: 820, h: 1160 },
-    { key: "A3", name: "A3", w: 1160, h: 1640 },
-    { key: "LETTER", name: "Letter", w: 816, h: 1056 },
-    { key: "LEGAL", name: "Legal", w: 816, h: 1344 },
+    { key: "A4", name: "A4", w: 595, h: 842 },
+    { key: "A3", name: "A3", w: 842, h: 1191 },
+    { key: "LETTER", name: "Letter", w: 612, h: 792 },
+    { key: "LEGAL", name: "Legal", w: 612, h: 1008 },
 ] as const;
 
 type PaperKey = (typeof PAPER_PRESETS)[number]["key"];
@@ -505,7 +505,7 @@ export function AddPresetModal({
                                 </div>
                                 <div style={{ fontWeight: 700, color: "#111827" }}>{cloneLabel}</div>
                                 <div style={{ fontSize: 12, color: "#6b7280" }}>
-                                    {displayW} × {displayH} px (ประมาณ)
+                                    {displayW} × {displayH} pt (ประมาณ)
                                 </div>
                             </div>
 
@@ -682,7 +682,7 @@ export function AddPresetModal({
                                         fontWeight: 700,
                                     }}
                                 >
-                                    margin 10px
+                                    margin 10pt
                                 </div>
                             </div>
 
@@ -690,7 +690,7 @@ export function AddPresetModal({
                                 {ori === "portrait" ? "Portrait" : "Landscape"}
                             </div>
                             <div style={{ fontSize: 12, color: "#6b7280" }}>
-                                {displayW} × {displayH} px
+                                {displayW} × {displayH} pt
                             </div>
                         </div>
                     </div>
