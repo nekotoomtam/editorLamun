@@ -4,7 +4,7 @@ export const emptyDoc: DocumentJson = {
     id: "doc-empty",
     name: "New Document",
     version: 1,
-    unit: "px",
+    unit: "pt",
 
     pagePresetOrder: [],
     pagePresetsById: {},
