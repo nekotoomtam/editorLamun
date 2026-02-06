@@ -187,9 +187,9 @@ export function ScrollCanvas(props: {
         let raf: number | null = null;
         let v = 0;
 
-        const WHEEL_GAIN = 0.15;  // ลด = ช้าลง
-        const MAX_V = 14;         // ลด = ช้าลง/ไม่พุ่ง
-        const FRICTION = 0.88;    // เพิ่มใกล้ 1 = ไหลยาวขึ้น, ลด = หยุดไวขึ้น
+        const WHEEL_GAIN = 0.4;  // ลด = ช้าลง
+        const MAX_V = 40;         // ลด = ช้าลง/ไม่พุ่ง
+        const FRICTION = 0.90;    // เพิ่มใกล้ 1 = ไหลยาวขึ้น, ลด = หยุดไวขึ้น
 
         const isLikelyMouseWheel = (e: WheelEvent) => {
             const dy = Math.abs(e.deltaY);
