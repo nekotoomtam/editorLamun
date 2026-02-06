@@ -12,6 +12,7 @@ import type { EditorSession } from "../../editor-core/editorSession";
 import type { PaperKey } from "./paperSizes";
 import * as Sel from "../../editor-core/schema/selectors";
 import * as Cmd from "../../editor-core/commands/docCommands";
+import { normalizeDocToPt } from "../../editor-core/commands/normalize";
 
 
 type DocStore = {
@@ -85,7 +86,9 @@ export function EditorStoreProvider({
     initialDoc: DocumentJson;
     children: React.ReactNode;
 }) {
-    const [doc, setDoc] = useState<DocumentJson>(() => bootstrapAllPresetHF(initialDoc));
+    const [doc, setDoc] = useState<DocumentJson>(() =>
+        bootstrapAllPresetHF(normalizeDocToPt(initialDoc))
+    );
     const [history, setHistory] = useState<DocHistoryState>(() => createInitialHistory());
 
     const docHistory = useMemo(() => createDocHistoryHelpers({ setDoc, setHistory }), [setDoc, setHistory]);
