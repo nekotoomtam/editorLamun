@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 type ScrollBehavior = "auto" | "smooth";
 
@@ -21,6 +21,7 @@ export function useScrollToPage({
 }) {
     const pendingScrollToRef = useRef<{ pageId: string; behavior: ScrollBehavior } | null>(null);
     const lastManualSelectAtRef = useRef(0);
+    const unlockTimerRef = useRef<number | null>(null);
 
     const markManualSelect = () => {
         lastManualSelectAtRef.current = performance.now();
@@ -58,7 +59,11 @@ export function useScrollToPage({
                     const nextTop = Math.max(0, top * zoom + paddingTop - PAGE_SCROLL_TOP_OFFSET);
                     rootEl.scrollTo({ top: nextTop, behavior });
                     // unlock after a short moment
-                    window.setTimeout(() => (isProgrammaticScrollRef.current = false), 120);
+                    if (unlockTimerRef.current != null) window.clearTimeout(unlockTimerRef.current);
+                    unlockTimerRef.current = window.setTimeout(() => {
+                        isProgrammaticScrollRef.current = false;
+                        unlockTimerRef.current = null;
+                    }, 120);
                     return;
                 }
                 pendingScrollToRef.current = { pageId, behavior };
@@ -84,6 +89,15 @@ export function useScrollToPage({
         },
         [pageRefs, scrollToPage]
     );
+
+    useEffect(() => {
+        return () => {
+            if (unlockTimerRef.current != null) {
+                window.clearTimeout(unlockTimerRef.current);
+                unlockTimerRef.current = null;
+            }
+        };
+    }, []);
 
     return {
         scrollToPage,

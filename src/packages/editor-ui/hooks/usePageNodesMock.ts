@@ -32,6 +32,18 @@ export function usePageNodesMock(doc: DocumentJson) {
 
     // ✅ token กัน race ต่อ page
     const reqTokenByPageRef = useRef<Map<PageId, number>>(new Map());
+    const timeoutByPageRef = useRef<Map<PageId, number>>(new Map());
+    const disposedRef = useRef(false);
+
+    useEffect(() => {
+        return () => {
+            disposedRef.current = true;
+            for (const t of timeoutByPageRef.current.values()) {
+                window.clearTimeout(t);
+            }
+            timeoutByPageRef.current.clear();
+        };
+    }, []);
 
     const ensure = useCallback((pageId: PageId) => {
         if (!pageId) return;
@@ -51,7 +63,11 @@ export function usePageNodesMock(doc: DocumentJson) {
 
         const ms = 200 + Math.floor(Math.random() * 450);
 
-        window.setTimeout(() => {
+        const existing = timeoutByPageRef.current.get(pageId);
+        if (existing != null) window.clearTimeout(existing);
+        const t = window.setTimeout(() => {
+            timeoutByPageRef.current.delete(pageId);
+            if (disposedRef.current) return;
             // ✅ ถ้ามี request ใหม่กว่าแล้ว ให้ทิ้งผลลัพธ์เก่า
             if (reqTokenByPageRef.current.get(pageId) !== nextToken) return;
 
@@ -70,6 +86,7 @@ export function usePageNodesMock(doc: DocumentJson) {
                 return next;
             });
         }, ms);
+        timeoutByPageRef.current.set(pageId, t);
     }, []);
 
     const ensureAround = useCallback((activePageId: PageId, radius = 2) => {

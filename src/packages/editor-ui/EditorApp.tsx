@@ -188,8 +188,12 @@ export function EditorApp() {
         window.addEventListener("mousemove", onMove);
         window.addEventListener("mouseup", onUp);
         return () => {
+            if (raf) cancelAnimationFrame(raf);
             window.removeEventListener("mousemove", onMove);
             window.removeEventListener("mouseup", onUp);
+            draggingLeft.current = false;
+            draggingRight.current = false;
+            document.body.style.userSelect = "";
         };
     }, []);
 
