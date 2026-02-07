@@ -24,10 +24,11 @@ export default function CollapsibleSection({
 
         measure();
 
-        // เผื่อ content เปลี่ยนสูงในอนาคต
-        const ro = new ResizeObserver(measure);
-        ro.observe(el);
-        return () => ro.disconnect();
+        // เผื่อ content เปลี่ยนสูงในอนาคต (fail-soft if ResizeObserver unavailable)
+        const RO = typeof ResizeObserver === "undefined" ? null : ResizeObserver;
+        const ro = RO ? new RO(measure) : null;
+        ro?.observe(el);
+        return () => ro?.disconnect();
     }, [children]);
 
     return (

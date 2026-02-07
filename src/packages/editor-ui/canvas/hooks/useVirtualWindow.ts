@@ -129,17 +129,20 @@ export function useVirtualWindow({
         // initial
         update();
 
-        // simple resize tracking
-        const ro = new ResizeObserver(() => {
-            if (isZoomingRef?.current) return;
-            update();
-        });
-        ro.observe(rootEl);
+        // simple resize tracking (fail-soft if ResizeObserver unavailable)
+        const RO = typeof ResizeObserver === "undefined" ? null : ResizeObserver;
+        const ro = RO
+            ? new RO(() => {
+                if (isZoomingRef?.current) return;
+                update();
+            })
+            : null;
+        ro?.observe(rootEl);
 
         return () => {
             if (raf) cancelAnimationFrame(raf);
             rootEl.removeEventListener("scroll", onScroll);
-            ro.disconnect();
+            ro?.disconnect();
         };
     }, [rootEl]);
 
