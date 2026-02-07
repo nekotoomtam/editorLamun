@@ -159,3 +159,8 @@
 
 Editor นี้ถูกออกแบบให้ **โตได้โดยไม่พัง**
 ไม่ใช่แค่ให้ใช้งานได้วันนี้
+
+Note:
+Detailed specifications (e.g. text layout, wrapping, rendering)
+are defined outside this document and may evolve independently,
+as long as they do not violate the laws above.
