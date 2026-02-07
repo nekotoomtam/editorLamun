@@ -1,8 +1,8 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useMemo, useState, useEffect } from "react";
 import { createDocHistoryHelpers, createInitialHistory, type DocHistoryState } from "./docHistory";
-import { createId, type DocumentJson, type Id, type NodeJson, type PagePreset } from "../../editor-core/schema";
+import { createId, DOC_VERSION_LATEST, type DocumentJson, type Id, type NodeJson, type PagePreset } from "../../editor-core/schema";
 import { createInitialSession, createSessionStore, type SessionOnlyStore } from "./sessionStore";
 import { createDocPresetsActions } from "./docPresetsActions";
 import { createDocPagesActions } from "./docPagesActions";
@@ -13,6 +13,67 @@ import type { PaperKey } from "./paperSizes";
 import * as Sel from "../../editor-core/schema/selectors";
 import * as Cmd from "../../editor-core/commands/docCommands";
 import { normalizeDocToPt } from "../../editor-core/commands/normalize";
+
+const __DEV__ = process.env.NODE_ENV !== "production";
+
+function assertDocInvariant(doc: DocumentJson) {
+    if (doc.version !== DOC_VERSION_LATEST) {
+        throw new Error(`Invariant: doc.version (${doc.version}) must be migrated to ${DOC_VERSION_LATEST} before use.`);
+    }
+
+    for (const presetId of doc.pagePresetOrder ?? []) {
+        if (!doc.pagePresetsById?.[presetId]) {
+            throw new Error(`Invariant: pagePresetOrder references missing preset ${presetId}.`);
+        }
+    }
+
+    for (const pageId of doc.pageOrder ?? []) {
+        if (!doc.pagesById?.[pageId]) {
+            throw new Error(`Invariant: pageOrder references missing page ${pageId}.`);
+        }
+    }
+
+    for (const [pageId, order] of Object.entries(doc.nodeOrderByPageId ?? {})) {
+        if (!doc.pagesById?.[pageId]) {
+            throw new Error(`Invariant: nodeOrderByPageId references missing page ${pageId}.`);
+        }
+        for (const nodeId of order ?? []) {
+            if (!doc.nodesById?.[nodeId]) {
+                throw new Error(`Invariant: nodeOrderByPageId references missing node ${nodeId}.`);
+            }
+        }
+    }
+
+    for (const [presetId, hf] of Object.entries(doc.headerFooterByPresetId ?? {})) {
+        if (!doc.pagePresetsById?.[presetId]) {
+            throw new Error(`Invariant: headerFooterByPresetId references missing preset ${presetId}.`);
+        }
+        for (const nodeId of hf.header?.nodeOrder ?? []) {
+            if (!doc.nodesById?.[nodeId]) {
+                throw new Error(`Invariant: header nodeOrder references missing node ${nodeId}.`);
+            }
+        }
+        for (const nodeId of hf.footer?.nodeOrder ?? []) {
+            if (!doc.nodesById?.[nodeId]) {
+                throw new Error(`Invariant: footer nodeOrder references missing node ${nodeId}.`);
+            }
+        }
+    }
+}
+
+function assertSelectionInvariant(doc: DocumentJson, session: EditorSession) {
+    if (session.activePageId && !doc.pagesById?.[session.activePageId]) {
+        throw new Error(`Invariant: activePageId references missing page ${session.activePageId}.`);
+    }
+    if (session.hoverNodeId && !doc.nodesById?.[session.hoverNodeId]) {
+        throw new Error(`Invariant: hoverNodeId references missing node ${session.hoverNodeId}.`);
+    }
+    for (const id of session.selectedNodeIds ?? []) {
+        if (!doc.nodesById?.[id]) {
+            throw new Error(`Invariant: selectedNodeIds references missing node ${id}.`);
+        }
+    }
+}
 
 
 type DocStore = {
@@ -86,15 +147,19 @@ export function EditorStoreProvider({
     initialDoc: DocumentJson;
     children: React.ReactNode;
 }) {
-    const [doc, setDoc] = useState<DocumentJson>(() =>
-        bootstrapAllPresetHF(normalizeDocToPt(initialDoc))
-    );
+    const initial = useMemo(() => {
+        const d = bootstrapAllPresetHF(normalizeDocToPt(initialDoc));
+        const firstPageId = d.pageOrder?.[0] ?? null;
+        return { doc: d, firstPageId };
+    }, [initialDoc]);
+
+    const [doc, setDoc] = useState<DocumentJson>(() => initial.doc);
     const [history, setHistory] = useState<DocHistoryState>(() => createInitialHistory());
 
     const docHistory = useMemo(() => createDocHistoryHelpers({ setDoc, setHistory }), [setDoc, setHistory]);
 
     const [session, setSession] = useState<EditorSession>(() =>
-        createInitialSession(initialDoc.pageOrder[0] ?? null)
+        createInitialSession(initial.firstPageId)
     );
 
     const applySession = useCallback((mut: (s: EditorSession) => EditorSession) => {
@@ -120,6 +185,32 @@ export function EditorStoreProvider({
     const hfActions = useMemo(() => {
         return createDocHfActions({ applyDoc: docHistory.applyDoc });
     }, [docHistory]);
+
+
+    useEffect(() => {
+        if (!__DEV__) return;
+
+        // heal session refs when doc changes
+        const fallbackPageId = doc.pageOrder?.[0] ?? null;
+
+        if (session.activePageId && !doc.pagesById?.[session.activePageId]) {
+            setSession(s => ({ ...s, activePageId: fallbackPageId }));
+            return; // รอ render รอบถัดไปก่อนค่อย assert อื่น
+        }
+
+        if (session.hoverNodeId && !doc.nodesById?.[session.hoverNodeId]) {
+            setSession(s => ({ ...s, hoverNodeId: null }));
+            return;
+        }
+
+        const selected = session.selectedNodeIds ?? [];
+        const filtered = selected.filter(id => !!doc.nodesById?.[id]);
+        if (filtered.length !== selected.length) {
+            setSession(s => ({ ...s, selectedNodeIds: filtered }));
+            return;
+        }
+    }, [doc, session.activePageId, session.hoverNodeId, session.selectedNodeIds]);
+
 
 
     const docStore = useMemo<DocStore>(() => {
