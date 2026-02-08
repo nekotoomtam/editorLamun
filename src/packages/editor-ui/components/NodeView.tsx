@@ -2,6 +2,7 @@
 
 import React from "react";
 import type { DocumentJson, NodeJson, AssetImage } from "../../editor-core/schema";
+import { ptToPx } from "../../editor-core/unitConversion";
 import { useEditorSessionStore } from "../store/editorStore";
 
 type ImageFit = "contain" | "cover" | "stretch";
@@ -14,25 +15,31 @@ const fitMap: Record<ImageFit, React.CSSProperties["objectFit"]> = {
 export function NodeView({
     node,
     doc,
-    offsetX = 0,
-    offsetY = 0,
+    zoneOriginX = 0,
+    zoneOriginY = 0,
 }: {
     node: NodeJson;
     doc: DocumentJson;
-    offsetX?: number;
-    offsetY?: number;
+    // node.x/y are PT in local space of the target zone; zoneOriginX/Y are the page-space PT origin of that zone.
+    zoneOriginX?: number;
+    zoneOriginY?: number;
 }) {
     const { session, setSelectedNodeIds } = useEditorSessionStore();
 
     const selected = (session.selectedNodeIds ?? []).includes(node.id);
     const locked = (node as any).locked === true;
 
+    const leftPt = (node.x ?? 0) + zoneOriginX;
+    const topPt = (node.y ?? 0) + zoneOriginY;
+    const widthPt = node.w ?? 0;
+    const heightPt = node.h ?? 0;
+
     const base: React.CSSProperties = {
         position: "absolute",
-        left: (node.x ?? 0) + offsetX,
-        top: (node.y ?? 0) + offsetY,
-        width: node.w ?? 0,
-        height: node.h ?? 0,
+        left: ptToPx(leftPt),
+        top: ptToPx(topPt),
+        width: ptToPx(widthPt),
+        height: ptToPx(heightPt),
         boxSizing: "border-box",
         userSelect: "none",
         pointerEvents: locked ? "none" : "auto",
@@ -62,7 +69,7 @@ export function NodeView({
                     ...outline,
                     background: node.style.fill ?? "transparent",
                     border: `1px solid ${node.style.stroke ?? "rgba(0,0,0,0.25)"}`,
-                    borderRadius: node.style.radius ?? 0,
+                    borderRadius: ptToPx(node.style.radius ?? 0),
                     opacity: (node as any).opacity ?? 1,
                 }}
                 onPointerDown={onPick}
@@ -81,8 +88,8 @@ export function NodeView({
                     padding: 2,
                     overflow: "hidden",
                     fontFamily: st.fontFamily,
-                    fontSize: st.fontSize,
-                    lineHeight: `${st.lineHeight}px`,
+                    fontSize: ptToPx(st.fontSize ?? 0),
+                    lineHeight: `${ptToPx(st.lineHeight ?? 0)}px`,
                     color: st.color ?? "#111827",
                     fontWeight: st.bold ? 700 : 400,
                     fontStyle: st.italic ? "italic" : "normal",

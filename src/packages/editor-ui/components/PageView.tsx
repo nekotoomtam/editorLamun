@@ -6,6 +6,7 @@ import { NodeView } from "./NodeView";
 import * as Sel from "../../editor-core/schema/selectors";
 import { computePageRects } from "../../editor-core/geometry/pageMetrics";
 import * as Cmd from "../../editor-core/commands/docCommands";
+import { ptToPx } from "../../editor-core/unitConversion";
 import { useEditorStore } from "../store/editorStore"; // ✅ เพิ่ม
 import { clientToPageDelta, clientToPagePoint } from "../utils/coords";
 
@@ -100,6 +101,8 @@ export function PageView({
 
     const pageW = preset.size.width;
     const pageH = preset.size.height;
+    const pageWpx = ptToPx(pageW);
+    const pageHpx = ptToPx(pageH);
     const hfZone = useMemo(() => Sel.getHeaderFooterZone(document, preset.id), [document.headerFooterByPresetId, preset.id]);
 
     // ===== preview + dragging state =====
@@ -161,6 +164,38 @@ export function PageView({
     }, [pageW, pageH, margin, headerH, footerH, headerAnchorToMargins, footerAnchorToMargins]);
 
     const content = rects.bodyRect;
+    const marginPx = {
+        top: ptToPx(margin.top),
+        right: ptToPx(margin.right),
+        bottom: ptToPx(margin.bottom),
+        left: ptToPx(margin.left),
+    };
+    const contentPx = {
+        x: ptToPx(content.x),
+        y: ptToPx(content.y),
+        w: ptToPx(content.w),
+        h: ptToPx(content.h),
+    };
+    const contentRectPx = {
+        x: ptToPx(rects.contentRect.x),
+        y: ptToPx(rects.contentRect.y),
+        w: ptToPx(rects.contentRect.w),
+        h: ptToPx(rects.contentRect.h),
+    };
+    const headerRectPx = {
+        x: ptToPx(rects.headerRect.x),
+        y: ptToPx(rects.headerRect.y),
+        w: ptToPx(rects.headerRect.w),
+        h: ptToPx(rects.headerRect.h),
+    };
+    const footerRectPx = {
+        x: ptToPx(rects.footerRect.x),
+        y: ptToPx(rects.footerRect.y),
+        w: ptToPx(rects.footerRect.w),
+        h: ptToPx(rects.footerRect.h),
+    };
+    const headerHpx = ptToPx(headerH);
+    const footerHpx = ptToPx(footerH);
 
 
     // ===== drag math config =====
@@ -325,9 +360,9 @@ export function PageView({
         const pw = pageWRef.current;
         const ph = pageHRef.current;
 
-        const { px, py } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
-        const nearHeaderBottom = headerH > 0 && Math.abs(py - rects.lines.headerBottomY) <= HF_HIT;
-        const nearFooterTop = footerH > 0 && Math.abs(py - rects.lines.footerTopY) <= HF_HIT;
+        const { px: xPt, py: yPt } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
+        const nearHeaderBottom = headerH > 0 && Math.abs(yPt - rects.lines.headerBottomY) <= HF_HIT;
+        const nearFooterTop = footerH > 0 && Math.abs(yPt - rects.lines.footerTopY) <= HF_HIT;
 
         if (nearHeaderBottom || nearFooterTop) {
             setHoverSide(null); // ไม่ให้ไปชนกับ drag margin
@@ -337,7 +372,7 @@ export function PageView({
             (wrapRef.current as any).style.cursor = "default";
         }
 
-        const side = hitTestSide(px, py, rects.lines);
+        const side = hitTestSide(xPt, yPt, rects.lines);
 
         // ถ้า preset locked และ source=preset => hover ได้แต่จะลากไม่ได้ (เพื่อให้รู้ว่ามีเส้น)
         setHoverSide(side);
@@ -361,10 +396,10 @@ export function PageView({
         const pw = pageWRef.current;
         const ph = pageHRef.current;
 
-        const { py } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
+        const { py: yPt } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
 
-        const nearHeaderBottom = headerH > 0 && Math.abs(py - rects.lines.headerBottomY) <= HF_HIT;
-        const nearFooterTop = footerH > 0 && Math.abs(py - rects.lines.footerTopY) <= HF_HIT;
+        const nearHeaderBottom = headerH > 0 && Math.abs(yPt - rects.lines.headerBottomY) <= HF_HIT;
+        const nearFooterTop = footerH > 0 && Math.abs(yPt - rects.lines.footerTopY) <= HF_HIT;
 
         // ✅ 1) handle header/footer resize ก่อน
 
@@ -576,6 +611,12 @@ export function PageView({
 
     const headerLineY = headerH > 0 ? snapDocY(rects.lines.headerBottomY) : null;
     const footerLineY = footerH > 0 ? snapDocY(rects.lines.footerTopY) : null;
+    const headerLineYPx = headerLineY != null ? ptToPx(headerLineY) : null;
+    const footerLineYPx = footerLineY != null ? ptToPx(footerLineY) : null;
+
+    const headerOrigin = { x: rects.contentRect.x, y: rects.headerRect.y };
+    const bodyOrigin = { x: rects.contentRect.x, y: rects.bodyRect.y };
+    const footerOrigin = { x: rects.contentRect.x, y: rects.footerRect.y };
 
 
     return (
@@ -586,8 +627,8 @@ export function PageView({
             }}
             style={{
                 position: "relative",
-                width: preset.size.width,
-                height: preset.size.height,
+                width: pageWpx,
+                height: pageHpx,
                 background: "#ffffff",
                 margin: "0 auto",
                 boxShadow: active
@@ -612,13 +653,13 @@ export function PageView({
                 if (!el) return;
                 const pw = pageWRef.current;
                 const ph = pageHRef.current;
-                const { py } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
+                const { py: yPt } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
 
-                if (headerH > 0 && py >= rects.headerRect.y && py <= (rects.headerRect.y + headerH)) {
+                if (headerH > 0 && yPt >= rects.headerRect.y && yPt <= (rects.headerRect.y + headerH)) {
                     setEditingTarget("header");
                     return;
                 }
-                if (footerH > 0 && py >= rects.footerRect.y && py <= (rects.footerRect.y + footerH)) {
+                if (footerH > 0 && yPt >= rects.footerRect.y && yPt <= (rects.footerRect.y + footerH)) {
                     setEditingTarget("footer");
                     return;
                 }
@@ -632,10 +673,10 @@ export function PageView({
                 if (!el) return;
                 const pw = pageWRef.current;
                 const ph = pageHRef.current;
-                const { py } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
+                const { py: yPt } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
 
-                const inHeader = headerH > 0 && py >= rects.headerRect.y && py <= (rects.headerRect.y + headerH);
-                const inFooter = footerH > 0 && py >= rects.footerRect.y && py <= (rects.footerRect.y + footerH);
+                const inHeader = headerH > 0 && yPt >= rects.headerRect.y && yPt <= (rects.headerRect.y + headerH);
+                const inFooter = footerH > 0 && yPt >= rects.footerRect.y && yPt <= (rects.footerRect.y + footerH);
 
                 if (editingTarget === "header" && !inHeader) setEditingTarget("page");
                 if (editingTarget === "footer" && !inFooter) setEditingTarget("page");
@@ -675,10 +716,10 @@ export function PageView({
                     <div
                         style={{
                             position: "absolute",
-                            left: content.x,
-                            top: content.y,
-                            width: content.w,
-                            height: content.h,
+                            left: contentPx.x,
+                            top: contentPx.y,
+                            width: contentPx.w,
+                            height: contentPx.h,
                             border: `${hairline} dashed #9ca3af`,
                             pointerEvents: "none",
                         }}
@@ -693,8 +734,8 @@ export function PageView({
                                 style={{
                                     position: "absolute",
                                     left: 0,
-                                    top: headerH + margin.top,
-                                    width: preset.size.width,
+                                    top: ptToPx(headerH + margin.top),
+                                    width: pageWpx,
                                     height: hairline,
                                     ...lineStyle(
                                         highlightSide === "top",
@@ -708,8 +749,8 @@ export function PageView({
                                 style={{
                                     position: "absolute",
                                     left: 0,
-                                    top: preset.size.height - footerH - margin.bottom,
-                                    width: preset.size.width,
+                                    top: ptToPx(pageH - footerH - margin.bottom),
+                                    width: pageWpx,
                                     height: hairline,
                                     ...lineStyle(highlightSide === "bottom", limitSide === "bottom"),
                                     pointerEvents: "none",
@@ -719,10 +760,10 @@ export function PageView({
                             <div
                                 style={{
                                     position: "absolute",
-                                    left: margin.left,
+                                    left: marginPx.left,
                                     top: 0,
                                     width: hairline,
-                                    height: preset.size.height,
+                                    height: pageHpx,
                                     ...lineStyle(highlightSide === "left", limitSide === "left"),
                                     pointerEvents: "none",
                                 }}
@@ -731,10 +772,10 @@ export function PageView({
                             <div
                                 style={{
                                     position: "absolute",
-                                    left: preset.size.width - margin.right,
+                                    left: ptToPx(pageW - margin.right),
                                     top: 0,
                                     width: hairline,
-                                    height: preset.size.height,
+                                    height: pageHpx,
                                     ...lineStyle(highlightSide === "right", limitSide === "right"),
                                     pointerEvents: "none",
                                 }}
@@ -769,21 +810,21 @@ export function PageView({
                         <div
                             style={{
                                 position: "absolute",
-                                left: rects.contentRect.x,
-                                top: rects.headerRect.y,
-                                width: rects.contentRect.w,
-                                height: headerH,
+                                left: contentRectPx.x,
+                                top: headerRectPx.y,
+                                width: contentRectPx.w,
+                                height: headerHpx,
                                 pointerEvents: "none",
                                 zIndex: 2,
                             }}
                         />
                     )}
-                    {headerLineY != null && (
+                    {headerLineYPx != null && (
                         <div style={{
                             position: "absolute",
-                            left: rects.contentRect.x,
-                            top: headerLineY,
-                            width: rects.contentRect.w,
+                            left: contentRectPx.x,
+                            top: headerLineYPx,
+                            width: contentRectPx.w,
                             height: hairline,
                             background: isHeaderMode ? "rgba(59,130,246,0.65)" : "rgba(0,0,0,0.12)",
                             pointerEvents: "none",
@@ -795,22 +836,22 @@ export function PageView({
                         <div
                             style={{
                                 position: "absolute",
-                                left: rects.contentRect.x,
-                                top: rects.footerRect.y,
-                                width: rects.contentRect.w,
-                                height: footerH,
+                                left: contentRectPx.x,
+                                top: footerRectPx.y,
+                                width: contentRectPx.w,
+                                height: footerHpx,
                                 pointerEvents: "none",
                                 zIndex: 2,
                             }}
                         />
                     )}
-                    {footerLineY != null && (
+                    {footerLineYPx != null && (
                         <div
                             style={{
                                 position: "absolute",
-                                left: rects.contentRect.x,
-                                top: footerLineY,
-                                width: rects.contentRect.w,
+                                left: contentRectPx.x,
+                                top: footerLineYPx,
+                                width: contentRectPx.w,
                                 height: hairline,
                                 background: isFooterMode ? "rgba(59,130,246,0.65)" : "rgba(0,0,0,0.12)",
                                 pointerEvents: "none",
@@ -826,8 +867,8 @@ export function PageView({
                         <div
                             style={{
                                 position: "absolute",
-                                left: rects.contentRect.x + 12,
-                                top: rects.headerRect.y + 8,
+                                left: contentRectPx.x + 12,
+                                top: headerRectPx.y + 8,
                                 padding: "3px 8px",
                                 borderRadius: 999,
                                 background: "rgba(59,130,246,0.85)",
@@ -846,8 +887,8 @@ export function PageView({
                         <div
                             style={{
                                 position: "absolute",
-                                left: rects.contentRect.x + 12,
-                                top: rects.footerRect.y + 8,
+                                left: contentRectPx.x + 12,
+                                top: footerRectPx.y + 8,
                                 padding: "3px 8px",
                                 borderRadius: 999,
                                 background: "rgba(59,130,246,0.85)",
@@ -866,17 +907,17 @@ export function PageView({
                 <>
                     {/* Header nodes */}
                     {headerNodes.map((n) => (
-                        <NodeView key={n.id} doc={document} node={n} offsetX={rects.contentRect.x} offsetY={rects.headerRect.y} />
+                        <NodeView key={n.id} doc={document} node={n} zoneOriginX={headerOrigin.x} zoneOriginY={headerOrigin.y} />
                     ))}
 
                     {/* Page (body) nodes */}
                     {nodes.map((n) => (
-                        <NodeView key={n.id} doc={document} node={n} offsetX={rects.contentRect.x} offsetY={rects.bodyRect.y} />
+                        <NodeView key={n.id} doc={document} node={n} zoneOriginX={bodyOrigin.x} zoneOriginY={bodyOrigin.y} />
                     ))}
 
                     {/* Footer nodes */}
                     {footerNodes.map((n) => (
-                        <NodeView key={n.id} doc={document} node={n} offsetX={rects.contentRect.x} offsetY={rects.footerRect.y} />
+                        <NodeView key={n.id} doc={document} node={n} zoneOriginX={footerOrigin.x} zoneOriginY={footerOrigin.y} />
                     ))}
                 </>
             )}
