@@ -1,7 +1,8 @@
 import type { Margin } from "../schema";
 
 // Keep margin rules in one place so both presets and page overrides behave identically.
-export const DEFAULT_MARGIN: Margin = { top: 10, right: 10, bottom: 10, left: 10 };
+// pt100 (10pt = 1000).
+export const DEFAULT_MARGIN: Margin = { top: 1000, right: 1000, bottom: 1000, left: 1000 };
 
 export function clampMargin(m: Margin): Margin {
     // Defensive: prevent negative and non-integer margins.

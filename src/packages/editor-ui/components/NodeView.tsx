@@ -3,6 +3,7 @@
 import React from "react";
 import type { DocumentJson, NodeJson, AssetImage } from "../../editor-core/schema";
 import { useEditorSessionStore } from "../store/editorStore";
+import { pt100ToPt } from "../utils/pt100";
 
 type ImageFit = "contain" | "cover" | "stretch";
 const fitMap: Record<ImageFit, React.CSSProperties["objectFit"]> = {
@@ -29,10 +30,10 @@ export function NodeView({
 
     const base: React.CSSProperties = {
         position: "absolute",
-        left: (node.x ?? 0) + offsetX,
-        top: (node.y ?? 0) + offsetY,
-        width: node.w ?? 0,
-        height: node.h ?? 0,
+        left: pt100ToPt(node.x ?? 0) + offsetX,
+        top: pt100ToPt(node.y ?? 0) + offsetY,
+        width: pt100ToPt(node.w ?? 0),
+        height: pt100ToPt(node.h ?? 0),
         boxSizing: "border-box",
         userSelect: "none",
         pointerEvents: locked ? "none" : "auto",
@@ -61,8 +62,8 @@ export function NodeView({
                     ...base,
                     ...outline,
                     background: node.style.fill ?? "transparent",
-                    border: `1px solid ${node.style.stroke ?? "rgba(0,0,0,0.25)"}`,
-                    borderRadius: node.style.radius ?? 0,
+                    border: `${pt100ToPt(node.style.strokeWidth ?? 100)}px solid ${node.style.stroke ?? "rgba(0,0,0,0.25)"}`,
+                    borderRadius: pt100ToPt(node.style.radius ?? 0),
                     opacity: (node as any).opacity ?? 1,
                 }}
                 onPointerDown={onPick}
@@ -81,8 +82,8 @@ export function NodeView({
                     padding: 2,
                     overflow: "hidden",
                     fontFamily: st.fontFamily,
-                    fontSize: st.fontSize,
-                    lineHeight: `${st.lineHeight}px`,
+                    fontSize: pt100ToPt(st.fontSize),
+                    lineHeight: `${pt100ToPt(st.lineHeight)}px`,
                     color: st.color ?? "#111827",
                     fontWeight: st.bold ? 700 : 400,
                     fontStyle: st.italic ? "italic" : "normal",

@@ -6,28 +6,28 @@ export type HeaderFooterConstraints = {
     /** footer สูงสุดเป็น % ของ pageH */
     maxFooterPct: number;
     /** ต้องเหลือ body (ภายใน content area = หลังหัก margin บน/ล่าง) อย่างน้อยเท่าไหร่ */
-    minBodyPx: number;
-    minHeaderPx: number;
-    minFooterPx: number;
+    minBodyPx: number;   // pt100 (legacy name)
+    minHeaderPx: number; // pt100 (legacy name)
+    minFooterPx: number; // pt100 (legacy name)
 };
 
 export const DEFAULT_HF_CONSTRAINTS: HeaderFooterConstraints = {
     maxHeaderPct: 0.25,
     maxFooterPct: 0.20,
-    minBodyPx: 120,
+    minBodyPx: 12000,
     minHeaderPx: 0,
     minFooterPx: 0,
 };
 
 export function clampRepeatAreaHeightPx(args: {
     kind: "header" | "footer";
-    desiredPx: number;
-    pageH: number;
+    desiredPx: number; // pt100 (legacy name)
+    pageH: number;     // pt100
     /** contentH = pageH - marginTop - marginBottom (optional; fallback = pageH) */
-    contentH?: number;
-    otherPx: number;
-    areaMinPx?: number;
-    areaMaxPx?: number;
+    contentH?: number; // pt100
+    otherPx: number;   // pt100 (legacy name)
+    areaMinPx?: number; // pt100 (legacy name)
+    areaMaxPx?: number; // pt100 (legacy name)
     constraints?: Partial<HeaderFooterConstraints>;
 }) {
     const c = { ...DEFAULT_HF_CONSTRAINTS, ...(args.constraints ?? {}) };
@@ -90,14 +90,14 @@ export function ensureHeaderFooter(doc: DocumentJson, presetId: Id) {
                 name: "Header",
                 // Default: match current UI expectations.
                 // If you need legacy behavior (0 height), migrate at load time.
-                heightPx: 100,
+                heightPx: 10000,
                 anchorToMargins: true,
                 nodeOrder: [],
             },
             footer: {
                 id: `hf-${presetId}-footer`,
                 name: "Footer",
-                heightPx: 80,
+                heightPx: 8000,
                 anchorToMargins: true,
                 nodeOrder: [],
             },

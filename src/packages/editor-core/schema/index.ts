@@ -1,4 +1,5 @@
 export type Id = string;
+// NOTE: "pt" here means pt100 (1/100 pt). "px" is legacy and must not be serialized.
 export type Unit = "px" | "pt";
 
 /**
@@ -25,6 +26,7 @@ export function createId(prefix?: string): Id {
 export const DOC_VERSION_LATEST = 1 as const;
 export type DocVersion = number;
 
+// pt100 (integer)
 export type Margin = {
     top: number;
     right: number;
@@ -37,7 +39,7 @@ export type MarginSource = "preset" | "page";
 export type RepeatArea = {
     id: Id;
     name?: string;
-    heightPx: number;        // ใช้จริง
+    heightPx: number;        // pt100 (legacy name; do not serialize px)
     /**
      * ถ้า true: วาง repeat area อิงภายใต้ margin (content area)
      * - header: เริ่มที่ marginTop
@@ -47,8 +49,8 @@ export type RepeatArea = {
      * NOTE: กฎ constraint (min body) ยังใช้ content area เหมือนเดิม
      */
     anchorToMargins?: boolean;
-    minHeightPx?: number;    // clamp
-    maxHeightPx?: number;    // clamp
+    minHeightPx?: number;    // pt100 (legacy name; clamp)
+    maxHeightPx?: number;    // pt100 (legacy name; clamp)
     /**
      * Phase-1 decision:
      * - Nodes are stored globally in DocumentJson.nodesById
@@ -115,6 +117,7 @@ export type DocumentJson = {
 export type PagePreset = {
     id: Id;
     name: string;
+    // size/margin are pt100 (integer)
     size: { width: number; height: number };
     margin: Margin;
     source?: "system" | "custom"
@@ -164,6 +167,7 @@ export type NodeBase = {
      * Position/size อยู่ใน "page-space" เสมอ (origin = มุมซ้ายบนของกระดาษ)
      * - สำหรับ owner.kind === 'page': x/y วัดจาก page origin
      * - สำหรับ header/footer: x/y วัดจาก zone origin (ยังเป็น page-space แต่ UI อาจ offset ตอน render)
+     * - Units are pt100 (integer).
      */
     x: number;
     y: number;

@@ -17,6 +17,6 @@ export { addPagePreset, setPresetMargin } from "./presets";
 
 export { ensureFirstPage, setPageMarginOverride } from "./pages";
 
-export { normalizeDocMargins, normalizeDocToPt } from "./normalize";
+export { normalizeDocMargins } from "./normalize";
 
 export { clampMargin, DEFAULT_MARGIN } from "./margins";

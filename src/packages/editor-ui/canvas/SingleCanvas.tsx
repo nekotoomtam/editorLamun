@@ -4,6 +4,7 @@ import type { DocumentJson, Id, PageJson } from "../../editor-core/schema";
 
 import { PageView } from "../components/PageView";
 import { CANVAS_CONFIG } from "./canvasConfig";
+import { pt100ToPt } from "../utils/pt100";
 
 export function SingleCanvas(props: {
     document: DocumentJson;
@@ -19,8 +20,8 @@ export function SingleCanvas(props: {
     if (!page) return <div>no page</div>;
 
     const preset = document.pagePresetsById?.[page.presetId];
-    const pageW = preset?.size?.width ?? 820;
-    const pageH = preset?.size?.height ?? 1100;
+    const pageW = pt100ToPt(preset?.size?.width ?? 82000);
+    const pageH = pt100ToPt(preset?.size?.height ?? 110000);
 
     return (
         <div style={{ padding: CANVAS_CONFIG.paddingPx }}>

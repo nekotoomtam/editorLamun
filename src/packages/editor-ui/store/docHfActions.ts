@@ -1,5 +1,6 @@
 import type { DocumentJson, Id } from "../../editor-core/schema";
 import * as Cmd from "../../editor-core/commands/docCommands";
+import { ptToPt100 } from "../utils/pt100";
 
 export type ApplyDoc = (mut: (draft: DocumentJson) => void, opts?: { recordHistory?: boolean }) => void;
 
@@ -27,7 +28,8 @@ export function createDocHfActions(args: { applyDoc: ApplyDoc }) {
     function updateRepeatAreaHeightPx(presetId: Id, kind: "header" | "footer", heightPx: number) {
         applyDoc((draft) => {
             const hf = Cmd.ensureHFCloneForPreset(draft, presetId);
-            const clamped = Cmd.clampRepeatAreaHeightPxForPreset(draft, presetId, kind, heightPx);
+            const desiredPt100 = ptToPt100(heightPx);
+            const clamped = Cmd.clampRepeatAreaHeightPxForPreset(draft, presetId, kind, desiredPt100);
 
             if (kind === "header") hf.header.heightPx = clamped;
             else hf.footer.heightPx = clamped;
