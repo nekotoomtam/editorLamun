@@ -8,7 +8,6 @@ import { computePageRects } from "../../editor-core/geometry/pageMetrics";
 import * as Cmd from "../../editor-core/commands/docCommands";
 import { useEditorStore } from "../store/editorStore"; // ✅ เพิ่ม
 import { clientToPageDelta, clientToPagePoint } from "../utils/coords";
-import { marginPt100ToPt, marginPtToPt100, pt100ToPt, ptToPt100 } from "../utils/pt100";
 
 type Side = "top" | "right" | "bottom" | "left";
 
@@ -84,28 +83,23 @@ export function PageView({
     }, [document.nodeOrderByPageId, document.nodesById, page.id, renderNodes, thumbPreview]);
 
     // ===== margin base (from doc) =====
-    const baseMarginPt100 = Sel.getEffectiveMargin(document, page.id) ?? preset.margin;
-    const baseMargin = marginPt100ToPt(baseMarginPt100);
-    const hfPt100 = useMemo(() => Sel.getEffectiveHeaderFooterHeights(document, page.id), [document.headerFooterByPresetId, page.id, page.presetId, page.headerHidden, page.footerHidden]);
-    const headerHBase = pt100ToPt(hfPt100.headerH);
-    const footerHBase = pt100ToPt(hfPt100.footerH);
-    const headerH = previewHeaderH ?? headerHBase;
-    const footerH = previewFooterH ?? footerHBase;
-    const headerAnchorToMargins = hfPt100.headerAnchorToMargins;
-    const footerAnchorToMargins = hfPt100.footerAnchorToMargins;
+    const baseMargin = Sel.getEffectiveMargin(document, page.id) ?? preset.margin;
+    const hf = useMemo(() => Sel.getEffectiveHeaderFooterHeights(document, page.id), [document.headerFooterByPresetId, page.id, page.presetId, page.headerHidden, page.footerHidden]);
+    const headerH = previewHeaderH ?? hf.headerH;
+    const footerH = previewFooterH ?? hf.footerH;
+    const headerAnchorToMargins = hf.headerAnchorToMargins;
+    const footerAnchorToMargins = hf.footerAnchorToMargins;
 
-    const hfRef = useRef({ headerH: headerHBase, footerH: footerHBase });
-    useEffect(() => { hfRef.current = { headerH: headerHBase, footerH: footerHBase }; }, [headerHBase, footerHBase]);
+    const hfRef = useRef(hf);
+    useEffect(() => { hfRef.current = hf; }, [hf]);
 
     const previewHeaderHRef = useRef<number | null>(null);
     const previewFooterHRef = useRef<number | null>(null);
     useEffect(() => { previewHeaderHRef.current = previewHeaderH; }, [previewHeaderH]);
     useEffect(() => { previewFooterHRef.current = previewFooterH; }, [previewFooterH]);
 
-    const pageWPt100 = preset.size.width;
-    const pageHPt100 = preset.size.height;
-    const pageW = pt100ToPt(pageWPt100);
-    const pageH = pt100ToPt(pageHPt100);
+    const pageW = preset.size.width;
+    const pageH = preset.size.height;
     const hfZone = useMemo(() => Sel.getHeaderFooterZone(document, preset.id), [document.headerFooterByPresetId, preset.id]);
 
     // ===== preview + dragging state =====
@@ -170,7 +164,7 @@ export function PageView({
 
 
     // ===== drag math config =====
-    const HIT = 6; // ระยะจับใกล้เส้น (pt display ใน page space)
+    const HIT = 6; // ระยะจับใกล้เส้น (px ใน page space)
     const MIN_CONTENT_W = 40;
     const MIN_CONTENT_H = 40;
 
@@ -190,37 +184,31 @@ export function PageView({
     function clampHeader(nextHeaderH: number, footerH: number, pageH: number) {
         const z = hfZoneRef.current;
         const m = previewMarginRef.current ?? baseMargin;
-        const mPt100 = marginPtToPt100(m);
-        const pageHPt100 = ptToPt100(pageH);
-        const contentH = Math.max(0, pageHPt100 - Math.max(0, mPt100.top) - Math.max(0, mPt100.bottom));
-        const nextPt100 = Cmd.clampRepeatAreaHeightPx({
+        const contentH = Math.max(0, pageH - Math.max(0, m.top) - Math.max(0, m.bottom));
+        return Cmd.clampRepeatAreaHeightPx({
             kind: "header",
-            desiredPx: ptToPt100(nextHeaderH),
-            pageH: pageHPt100,
+            desiredPx: nextHeaderH,
+            pageH,
             contentH,
-            otherPx: ptToPt100(footerH),
+            otherPx: footerH,
             areaMinPx: z?.header?.minHeightPx,
             areaMaxPx: z?.header?.maxHeightPx,
         });
-        return pt100ToPt(nextPt100);
     }
 
     function clampFooter(nextFooterH: number, headerH: number, pageH: number) {
         const z = hfZoneRef.current;
         const m = previewMarginRef.current ?? baseMargin;
-        const mPt100 = marginPtToPt100(m);
-        const pageHPt100 = ptToPt100(pageH);
-        const contentH = Math.max(0, pageHPt100 - Math.max(0, mPt100.top) - Math.max(0, mPt100.bottom));
-        const nextPt100 = Cmd.clampRepeatAreaHeightPx({
+        const contentH = Math.max(0, pageH - Math.max(0, m.top) - Math.max(0, m.bottom));
+        return Cmd.clampRepeatAreaHeightPx({
             kind: "footer",
-            desiredPx: ptToPt100(nextFooterH),
-            pageH: pageHPt100,
+            desiredPx: nextFooterH,
+            pageH,
             contentH,
-            otherPx: ptToPt100(headerH),
+            otherPx: headerH,
             areaMinPx: z?.footer?.minHeightPx,
             areaMaxPx: z?.footer?.maxHeightPx,
         });
-        return pt100ToPt(nextPt100);
     }
 
 
@@ -387,10 +375,10 @@ export function PageView({
                 presetId: preset.id,
                 kind: nearHeaderBottom ? "header" : "footer",
                 startPageY: pt.py,
-            startHeaderH: headerH,
-            startFooterH: footerH,
-            pageH,
-            pointerId: e.pointerId
+                startHeaderH: headerH,
+                startFooterH: footerH,
+                pageH,
+                pointerId: e.pointerId
             };
 
             const kind = nearHeaderBottom ? "header" : "footer";
@@ -416,7 +404,7 @@ export function PageView({
                 return { px: pt.px, py: pt.py };
             })(),
             startMargin: baseMargin,
-            pageW,
+            pageW: preset.size.width,
             pageH,
             pointerId: e.pointerId
         };
@@ -442,13 +430,13 @@ export function PageView({
 
                 if (ctxHF.kind === "header") {
                     const raw = ctxHF.startHeaderH + dy;
-                const curFooterH = previewFooterHRef.current ?? hfRef.current.footerH;
-                setPreviewHeaderH(clampHeader(raw, curFooterH, ctxHF.pageH));
-            } else {
-                const raw = ctxHF.startFooterH - dy;
-                const curHeaderH = previewHeaderHRef.current ?? hfRef.current.headerH;
-                setPreviewFooterH(clampFooter(raw, curHeaderH, ctxHF.pageH));
-            }
+                    const curFooterH = previewFooterHRef.current ?? hfRef.current.footerH;
+                    setPreviewHeaderH(clampHeader(raw, curFooterH, ctxHF.pageH));
+                } else {
+                    const raw = ctxHF.startFooterH - dy;
+                    const curHeaderH = previewHeaderHRef.current ?? hfRef.current.headerH;
+                    setPreviewFooterH(clampFooter(raw, curHeaderH, ctxHF.pageH));
+                }
                 return;
             }
 
@@ -598,8 +586,8 @@ export function PageView({
             }}
             style={{
                 position: "relative",
-                width: pageW,
-                height: pageH,
+                width: preset.size.width,
+                height: preset.size.height,
                 background: "#ffffff",
                 margin: "0 auto",
                 boxShadow: active
@@ -706,7 +694,7 @@ export function PageView({
                                     position: "absolute",
                                     left: 0,
                                     top: headerH + margin.top,
-                            width: pageW,
+                                    width: preset.size.width,
                                     height: hairline,
                                     ...lineStyle(
                                         highlightSide === "top",
@@ -720,8 +708,8 @@ export function PageView({
                                 style={{
                                     position: "absolute",
                                     left: 0,
-                                    top: pageH - footerH - margin.bottom,
-                                width: pageW,
+                                    top: preset.size.height - footerH - margin.bottom,
+                                    width: preset.size.width,
                                     height: hairline,
                                     ...lineStyle(highlightSide === "bottom", limitSide === "bottom"),
                                     pointerEvents: "none",
@@ -734,7 +722,7 @@ export function PageView({
                                     left: margin.left,
                                     top: 0,
                                     width: hairline,
-                                height: pageH,
+                                    height: preset.size.height,
                                     ...lineStyle(highlightSide === "left", limitSide === "left"),
                                     pointerEvents: "none",
                                 }}
@@ -743,10 +731,10 @@ export function PageView({
                             <div
                                 style={{
                                     position: "absolute",
-                                left: pageW - margin.right,
+                                    left: preset.size.width - margin.right,
                                     top: 0,
                                     width: hairline,
-                                height: pageH,
+                                    height: preset.size.height,
                                     ...lineStyle(highlightSide === "right", limitSide === "right"),
                                     pointerEvents: "none",
                                 }}

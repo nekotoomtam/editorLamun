@@ -4,7 +4,6 @@ import type { PaperKey } from "./paperSizes";
 import { PAPER_SIZES } from "./paperSizes";
 import { cleanMarginPatch, toFullMargin } from "./marginUtils";
 import * as Cmd from "../../editor-core/commands/docCommands";
-import { marginPatchPtToPt100, ptToPt100 } from "../utils/pt100";
 
 export type ApplyDoc = (mut: (draft: DocumentJson) => void, opts?: { recordHistory?: boolean }) => void;
 export type ApplySession = (mut: (s: any) => any) => void; // จะ tighten ทีหลังก็ได้
@@ -22,13 +21,9 @@ export function createDocPresetsActions(args: {
             const p = draft.pagePresetsById[presetId];
             if (!p || p.locked) return;
 
-            const sizePatch: Partial<PagePreset["size"]> = {};
-            if (patch.width !== undefined) sizePatch.width = ptToPt100(patch.width);
-            if (patch.height !== undefined) sizePatch.height = ptToPt100(patch.height);
-
             draft.pagePresetsById[presetId] = {
                 ...p,
-                size: { ...p.size, ...sizePatch },
+                size: { ...p.size, ...patch },
                 source: p.source ?? "custom",
             };
         });
@@ -39,7 +34,7 @@ export function createDocPresetsActions(args: {
             const p = draft.pagePresetsById[presetId];
             if (!p || p.locked) return;
 
-            const merged = { ...p.margin, ...marginPatchPtToPt100(patch) };
+            const merged = { ...p.margin, ...patch };
             Cmd.setPresetMargin(draft, presetId, merged);
         });
     }
@@ -82,7 +77,7 @@ export function createDocPresetsActions(args: {
             if (!preset) return;
 
             const baseFull = toFullMargin(preset.margin, page.marginOverride as any);
-            const merged = { ...baseFull, ...cleanMarginPatch(marginPatchPtToPt100(patch)) };
+            const merged = { ...baseFull, ...cleanMarginPatch(patch) };
 
             Cmd.setPageMarginOverride(draft, pageId, merged);
         });
@@ -107,7 +102,7 @@ export function createDocPresetsActions(args: {
                 id: presetId,
                 name: draftInput.name,
                 size,
-                margin: { top: 1000, right: 1000, bottom: 1000, left: 1000 },
+                margin: { top: 10, right: 10, bottom: 10, left: 10 },
                 source: "custom",
                 locked: false,
             };
@@ -151,10 +146,7 @@ export function createDocPresetsActions(args: {
             }
 
             if (patch.size) {
-                const sizePatch: Partial<PagePreset["size"]> = {};
-                if (patch.size.width !== undefined) sizePatch.width = ptToPt100(patch.size.width);
-                if (patch.size.height !== undefined) sizePatch.height = ptToPt100(patch.size.height);
-                nextP.size = { ...nextP.size, ...sizePatch };
+                nextP.size = { ...nextP.size, ...patch.size };
                 nextP.source = nextP.source ?? "custom";
             }
 

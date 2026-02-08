@@ -5,8 +5,8 @@ import type { MutableRefObject } from "react";
 
 export type VirtualWindowArgs = {
     rootEl: HTMLElement | null;
-    offsets: number[]; // page-space units (pt display)
-    heights: number[]; // page-space units (pt display)
+    offsets: number[]; // doc units
+    heights: number[]; // doc units
     zoom: number;
     paddingPx: number;
 

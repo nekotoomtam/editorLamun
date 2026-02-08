@@ -5,7 +5,6 @@ import type { DocumentJson, Id, PagePreset } from "../editor-core/schema";
 import { getOrientation } from "../editor-core/schema";
 import { useEditorStore } from "./store/editorStore";
 import CollapsibleSection from "./CollapsibleSection";
-import { marginPt100ToPt, pt100ToPt } from "./utils/pt100";
 
 type InspectorCollapse = {
     page: boolean;
@@ -149,8 +148,8 @@ export function Inspector({
     // ✅ NEW: effective margin ตาม source
     const effectiveMargin = useMemo(() => {
         if (!preset || !page) return null;
-        const base = marginSource === "page" ? (page.marginOverride ?? preset.margin) : preset.margin;
-        return marginPt100ToPt(base);
+        if (marginSource === "page") return page.marginOverride ?? preset.margin;
+        return preset.margin;
     }, [preset, page, marginSource]);
 
     if (!page || !preset) {
@@ -342,23 +341,23 @@ export function Inspector({
             <CollapsibleSection open={open.hf} onToggle={() => toggle("hf")} title="Header / Footer">
                 {(() => {
                     const hf = doc.headerFooterByPresetId?.[preset.id];
-                    const headerPt = pt100ToPt(hf?.header?.heightPx ?? 0);
-                    const footerPt = pt100ToPt(hf?.footer?.heightPx ?? 0);
+                    const headerPx = hf?.header?.heightPx ?? 0;
+                    const footerPx = hf?.footer?.heightPx ?? 0;
                     const headerAnchor = hf?.header?.anchorToMargins ?? true;
                     const footerAnchor = hf?.footer?.anchorToMargins ?? true;
 
-                    const headerEnabled = headerPt > 0;
-                    const footerEnabled = footerPt > 0;
+                    const headerEnabled = headerPx > 0;
+                    const footerEnabled = footerPx > 0;
 
                     const setHeaderEnabled = (on: boolean) => {
                         // เปิด = default 100, ปิด = 0
-                        updateRepeatAreaHeightPx(preset.id, "header", on ? (headerPt || 100) : 0);
+                        updateRepeatAreaHeightPx(preset.id, "header", on ? (headerPx || 100) : 0);
                         // ถ้าปิด preset ก็เคลียร์ hide ของ page ให้กลับมาเป็น false จะได้ไม่งง
                         if (!on) setPageHeaderFooterHidden(page.id, { headerHidden: false });
                     };
 
                     const setFooterEnabled = (on: boolean) => {
-                        updateRepeatAreaHeightPx(preset.id, "footer", on ? (footerPt || 80) : 0);
+                        updateRepeatAreaHeightPx(preset.id, "footer", on ? (footerPx || 80) : 0);
                         if (!on) setPageHeaderFooterHidden(page.id, { footerHidden: false });
                     };
 
@@ -380,7 +379,7 @@ export function Inspector({
                                     <FieldRow label="Height">
                                         <input
                                             type="number"
-                                            value={headerPt}
+                                            value={headerPx}
                                             min={0}
                                             onChange={(e) => updateRepeatAreaHeightPx(preset.id, "header", clampInt(Number(e.target.value), 0, 600))}
                                             style={{
@@ -434,7 +433,7 @@ export function Inspector({
                                     <FieldRow label="Height">
                                         <input
                                             type="number"
-                                            value={footerPt}
+                                            value={footerPx}
                                             min={0}
                                             onChange={(e) => updateRepeatAreaHeightPx(preset.id, "footer", clampInt(Number(e.target.value), 0, 600))}
                                             style={{
@@ -529,7 +528,7 @@ export function Inspector({
                     <input
                         type="number"
                         disabled={marginSource === "preset" ? isLocked : false}
-                        value={effectiveMargin?.top ?? pt100ToPt(preset.margin.top)}
+                        value={effectiveMargin?.top ?? preset.margin.top}
                         onChange={(e) => onChangeMargin("top", Number(e.target.value))}
                         style={{
                             width: "100%",
@@ -544,7 +543,7 @@ export function Inspector({
                     <input
                         type="number"
                         disabled={marginSource === "preset" ? isLocked : false}
-                        value={effectiveMargin?.right ?? pt100ToPt(preset.margin.right)}
+                        value={effectiveMargin?.right ?? preset.margin.right}
                         onChange={(e) => onChangeMargin("right", Number(e.target.value))}
                         style={{
                             width: "100%",
@@ -559,7 +558,7 @@ export function Inspector({
                     <input
                         type="number"
                         disabled={marginSource === "preset" ? isLocked : false}
-                        value={effectiveMargin?.bottom ?? pt100ToPt(preset.margin.bottom)}
+                        value={effectiveMargin?.bottom ?? preset.margin.bottom}
                         onChange={(e) => onChangeMargin("bottom", Number(e.target.value))}
                         style={{
                             width: "100%",
@@ -574,7 +573,7 @@ export function Inspector({
                     <input
                         type="number"
                         disabled={marginSource === "preset" ? isLocked : false}
-                        value={effectiveMargin?.left ?? pt100ToPt(preset.margin.left)}
+                        value={effectiveMargin?.left ?? preset.margin.left}
                         onChange={(e) => onChangeMargin("left", Number(e.target.value))}
                         style={{
                             width: "100%",

@@ -3,7 +3,6 @@
 import React from "react";
 import type { DocumentJson, PageJson } from "../../editor-core/schema";
 import { PageView } from "./PageView";
-import { pt100ToPt } from "../utils/pt100";
 
 function SkeletonGhostLayer({
     document,
@@ -36,15 +35,10 @@ function SkeletonGhostLayer({
                 if (!n) return null;
 
                 // ✅ รองรับชื่อ field หลายแบบ (กัน schema เปลี่ยน)
-                const xPt100 = n.x ?? n.rect?.x ?? 0;
-                const yPt100 = n.y ?? n.rect?.y ?? 0;
-                const wPt100 = n.width ?? n.w ?? n.rect?.width ?? 6000;
-                const hPt100 = n.height ?? n.h ?? n.rect?.height ?? 1800;
-
-                const x = pt100ToPt(xPt100);
-                const y = pt100ToPt(yPt100);
-                const w = pt100ToPt(wPt100);
-                const h = pt100ToPt(hPt100);
+                const x = n.x ?? n.rect?.x ?? 0;
+                const y = n.y ?? n.rect?.y ?? 0;
+                const w = n.width ?? n.w ?? n.rect?.width ?? 60;
+                const h = n.height ?? n.h ?? n.rect?.height ?? 18;
 
                 // clamp กันหลุดหน้า
                 const cx = Math.max(0, x);
@@ -99,8 +93,8 @@ export function VirtualPage(props: {
     const { document, page, showMargin, active, level, onActivate, loading } = props;
 
     const preset = document.pagePresetsById?.[page.presetId] ?? null;
-    const pageH = pt100ToPt(preset?.size?.height ?? 110000);
-    const pageW = pt100ToPt(preset?.size?.width ?? 82000);
+    const pageH = preset?.size?.height ?? 1100;
+    const pageW = preset?.size?.width ?? 820;
 
     // ✅ none = placeholder กินพื้นที่เท่าหน้าจริง
     if (level === "none") {

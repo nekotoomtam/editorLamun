@@ -2,7 +2,6 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import type { DocumentJson, Id, PagePreset } from "../editor-core/schema";
-import { pt100ToPt } from "./utils/pt100";
 
 const PAPER_PRESETS = [
     { key: "A4", name: "A4", w: 595, h: 842 },
@@ -147,7 +146,7 @@ export function AddPresetModal({
             setName(targetPreset.name ?? "Untitled preset");
 
             // ✅ derive paperKey จาก size ของ preset
-            setPaperKey(guessPaperKeyFromSize(pt100ToPt(targetPreset.size.width), pt100ToPt(targetPreset.size.height)));
+            setPaperKey(guessPaperKeyFromSize(targetPreset.size.width, targetPreset.size.height));
 
             if (presetMode === "delete") {
                 const fallback = presetOptions.find((p) => p.id !== targetPreset.id)?.id ?? null;
@@ -187,7 +186,7 @@ export function AddPresetModal({
             base.size.width > base.size.height ? "landscape" : "portrait";
 
         setOri(baseOri);
-        setPaperKey(guessPaperKeyFromSize(pt100ToPt(base.size.width), pt100ToPt(base.size.height)));
+        setPaperKey(guessPaperKeyFromSize(base.size.width, base.size.height));
         if (!nameTouched) setName(`${base.name} (copy)`);
     }, [cloneFromId, open, presetMode, nameTouched, doc.pagePresetsById, doc.pagePresetOrder.length, isBootstrap]);
 
@@ -317,9 +316,9 @@ export function AddPresetModal({
     // ✅ display size: create ใช้ paperKey, edit/delete ใช้ paperKey ด้วย (เดาจาก targetPreset)
     const selectedPaper = getPaper(paperKey);
     const baseW =
-        presetMode === "create" ? selectedPaper.w : (targetPreset ? pt100ToPt(targetPreset.size.width) : selectedPaper.w);
+        presetMode === "create" ? selectedPaper.w : (targetPreset?.size.width ?? selectedPaper.w);
     const baseH =
-        presetMode === "create" ? selectedPaper.h : (targetPreset ? pt100ToPt(targetPreset.size.height) : selectedPaper.h);
+        presetMode === "create" ? selectedPaper.h : (targetPreset?.size.height ?? selectedPaper.h);
 
     // เวลา edit แล้วสลับ ori ให้ preview “หมุน” จาก base ที่เลือก (ไม่ยึด targetBaseOri)
     const displayW = ori === "portrait" ? Math.min(baseW, baseH) : Math.max(baseW, baseH);

@@ -1,4 +1,5 @@
-import type { DocumentJson, Id, PageJson } from "../schema";
+import type { DocumentJson, Id, PageJson, RepeatArea } from "../schema";
+import { pxToPt } from "../unitConversion";
 import { clampMargin } from "./margins";
 
 /**
@@ -54,3 +55,101 @@ export function normalizeDocMargins(doc: DocumentJson): boolean {
   return changed;
 }
 
+export function normalizeDocToPt(doc: DocumentJson): DocumentJson {
+  if (doc.unit !== "px") {
+    return doc;
+  }
+
+  const toPt = (value: number) => pxToPt(value);
+  const toMargin = (margin: { top: number; right: number; bottom: number; left: number }) => ({
+    top: toPt(margin.top),
+    right: toPt(margin.right),
+    bottom: toPt(margin.bottom),
+    left: toPt(margin.left),
+  });
+  const toRepeatArea = (area: RepeatArea): RepeatArea => ({
+    ...area,
+    heightPx: toPt(area.heightPx),
+    minHeightPx: area.minHeightPx === undefined ? undefined : toPt(area.minHeightPx),
+    maxHeightPx: area.maxHeightPx === undefined ? undefined : toPt(area.maxHeightPx),
+  });
+
+  const pagePresetsById: DocumentJson["pagePresetsById"] = {};
+  for (const [presetId, preset] of Object.entries(doc.pagePresetsById)) {
+    pagePresetsById[presetId] = {
+      ...preset,
+      size: {
+        width: toPt(preset.size.width),
+        height: toPt(preset.size.height),
+      },
+      margin: toMargin(preset.margin),
+    };
+  }
+
+  const headerFooterByPresetId = doc.headerFooterByPresetId
+    ? Object.fromEntries(
+        Object.entries(doc.headerFooterByPresetId).map(([presetId, areas]) => [
+          presetId,
+          {
+            header: toRepeatArea(areas.header),
+            footer: toRepeatArea(areas.footer),
+          },
+        ])
+      )
+    : undefined;
+
+  const pagesById: DocumentJson["pagesById"] = {};
+  for (const [pageId, page] of Object.entries(doc.pagesById)) {
+    pagesById[pageId] = page.marginOverride
+      ? { ...page, marginOverride: toMargin(page.marginOverride) }
+      : { ...page };
+  }
+
+  const nodesById: DocumentJson["nodesById"] = {};
+  for (const [nodeId, node] of Object.entries(doc.nodesById)) {
+    const base = {
+      ...node,
+      x: toPt(node.x),
+      y: toPt(node.y),
+      w: toPt(node.w),
+      h: toPt(node.h),
+    };
+
+    if (node.type === "text") {
+      const letterSpacing = (node.style as { letterSpacing?: number }).letterSpacing;
+      nodesById[nodeId] = {
+        ...base,
+        style: {
+          ...node.style,
+          fontSize: toPt(node.style.fontSize),
+          lineHeight: toPt(node.style.lineHeight),
+          ...(typeof letterSpacing === "number" ? { letterSpacing: toPt(letterSpacing) } : {}),
+        },
+      };
+    } else {
+      nodesById[nodeId] = base;
+    }
+  }
+
+  const guides = doc.guides
+    ? {
+        ...doc.guides,
+        byId: Object.fromEntries(
+          Object.entries(doc.guides.byId).map(([guideId, guide]) => [
+            guideId,
+            { ...guide, pos: toPt(guide.pos) },
+          ])
+        ),
+      }
+    : undefined;
+
+  return {
+    ...doc,
+    unit: "pt",
+    pagePresetsById,
+    headerFooterByPresetId,
+    pagesById,
+    nodesById,
+    guides,
+  };
+}

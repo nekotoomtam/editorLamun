@@ -1,16 +1,16 @@
 // UI coordinate helpers.
 //
 // Goal: keep all interactions stable under zoom/transform/virtualization.
-// Always convert from client-space (PointerEvent.clientX/Y) into page-space (document pt display units).
+// Always convert from client-space (PointerEvent.clientX/Y) into page-space (document px).
 
 export type PageSpacePoint = {
-    /** page-space X (pt display) */
+    /** page-space X (px) */
     px: number;
-    /** page-space Y (pt display) */
+    /** page-space Y (px) */
     py: number;
-    /** effective scaleX (client px per page unit) */
+    /** effective scaleX (client px per page px) */
     scaleX: number;
-    /** effective scaleY (client px per page unit) */
+    /** effective scaleY (client px per page px) */
     scaleY: number;
     rect: DOMRect;
 };
