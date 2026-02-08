@@ -2,7 +2,7 @@
 
 import React from "react";
 import type { DocumentJson, NodeJson, AssetImage } from "../../editor-core/schema";
-import { useEditorStore } from "../store/editorStore";
+import { useEditorSessionStore } from "../store/editorStore";
 
 type ImageFit = "contain" | "cover" | "stretch";
 const fitMap: Record<ImageFit, React.CSSProperties["objectFit"]> = {
@@ -22,7 +22,7 @@ export function NodeView({
     offsetX?: number;
     offsetY?: number;
 }) {
-    const { session, setSelectedNodeIds } = useEditorStore();
+    const { session, setSelectedNodeIds } = useEditorSessionStore();
 
     const selected = (session.selectedNodeIds ?? []).includes(node.id);
     const locked = (node as any).locked === true;

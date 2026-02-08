@@ -40,6 +40,7 @@
 * action/op เดียว + input เดียว → ผลลัพธ์ต้องเหมือนเดิมเสมอ
 * ห้ามผูกผลกับ DOM / เวลา / random
 * ถ้าจำเป็นต้องใช้ environment ให้ inject ผ่าน dependency
+* id generation is considered part of determinism and must not rely on randomness or time
 
 ### B3. Command / Op ต้อง atomic + reversible
 
@@ -71,11 +72,19 @@
   * dragPreview, transient flags
 * UI state reset ได้โดยไม่กระทบเอกสาร
 
-### C3. Coordinate อยู่ unit เดียว
+### C3. Coordinate & Unit Consistency
 
-* ปัจจุบันใช้ **px** เป็น unit เดียวของ doc
-* zoom / scale ทำที่ขอบ UI เท่านั้น
-* snap / grid / guides ต้องคิดใน unit เดียวกันเสมอ
+* Document geometry (position, size, margin, spacing) must be stored in **pt100 (integer)** only
+* pt100 = 1/100 pt (1 pt = 1/72 inch)
+* px is **for UI / viewport rendering only** and must never be serialized into the document
+* zoom / scale is applied at the UI boundary only
+* snap / grid / guides must operate in pt100 (or units converted to pt100 before use)
+
+
+* UI may use floating-point values during interaction (typing, dragging, preview)
+* Only committed document state may enter the core, and it must be converted to pt100
+* UI display precision must not exceed commit precision
+
 
 ---
 
@@ -90,6 +99,8 @@
   * interaction (pointer / keyboard)
   * measurement ที่เลี่ยงไม่ได้
 * measurement ต้องผ่าน abstraction กลาง (swap / mock ได้)
+* DOM measurements must never be stored directly as document geometry
+
 
 ### D2. Virtualization เป็น optimization ไม่ใช่ logic
 
@@ -132,6 +143,8 @@
   * nodeOrder ต้องชี้ node ที่มีจริง
   * ลบ page ต้อง cleanup nodes / order / selection ให้ครบ
 
+* All document geometry values must be integers (pt100)
+* No document field may imply another unit (e.g. Px, Mm, Cm)
 ---
 
 ## F) Additional Laws (เสริม)
@@ -147,6 +160,13 @@
 * core export ผ่าน index / barrel เดียว
 * ลด coupling ตอน refactor
 
+---
+
+### G) Boundary Rules
+
+* All unit conversions must happen at layer boundaries
+* editor-core never converts units
+* UI is responsible for converting user input to pt100 before dispatch
 ---
 
 ## Final Rule
