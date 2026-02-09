@@ -94,7 +94,7 @@ export function Inspector({
         // ✅ NEW
         setPageMarginSource,
         updatePageMargin,
-        updateRepeatAreaHeightPx,
+        updateRepeatAreaHeightPt,
         updateRepeatAreaAnchorToMargins,
         setPageHeaderFooterHidden,
     } = useEditorStore();
@@ -341,23 +341,23 @@ export function Inspector({
             <CollapsibleSection open={open.hf} onToggle={() => toggle("hf")} title="Header / Footer">
                 {(() => {
                     const hf = doc.headerFooterByPresetId?.[preset.id];
-                    const headerPx = hf?.header?.heightPx ?? 0;
-                    const footerPx = hf?.footer?.heightPx ?? 0;
+                    const headerPt = hf?.header?.heightPt ?? 0;
+                    const footerPt = hf?.footer?.heightPt ?? 0;
                     const headerAnchor = hf?.header?.anchorToMargins ?? true;
                     const footerAnchor = hf?.footer?.anchorToMargins ?? true;
 
-                    const headerEnabled = headerPx > 0;
-                    const footerEnabled = footerPx > 0;
+                    const headerEnabled = headerPt > 0;
+                    const footerEnabled = footerPt > 0;
 
                     const setHeaderEnabled = (on: boolean) => {
                         // เปิด = default 100, ปิด = 0
-                        updateRepeatAreaHeightPx(preset.id, "header", on ? (headerPx || 100) : 0);
+                        updateRepeatAreaHeightPt(preset.id, "header", on ? (headerPt || 100) : 0);
                         // ถ้าปิด preset ก็เคลียร์ hide ของ page ให้กลับมาเป็น false จะได้ไม่งง
                         if (!on) setPageHeaderFooterHidden(page.id, { headerHidden: false });
                     };
 
                     const setFooterEnabled = (on: boolean) => {
-                        updateRepeatAreaHeightPx(preset.id, "footer", on ? (footerPx || 80) : 0);
+                        updateRepeatAreaHeightPt(preset.id, "footer", on ? (footerPt || 80) : 0);
                         if (!on) setPageHeaderFooterHidden(page.id, { footerHidden: false });
                     };
 
@@ -379,9 +379,9 @@ export function Inspector({
                                     <FieldRow label="Height">
                                         <input
                                             type="number"
-                                            value={headerPx}
+                                            value={headerPt}
                                             min={0}
-                                            onChange={(e) => updateRepeatAreaHeightPx(preset.id, "header", clampInt(Number(e.target.value), 0, 600))}
+                                            onChange={(e) => updateRepeatAreaHeightPt(preset.id, "header", clampInt(Number(e.target.value), 0, 600))}
                                             style={{
                                                 width: "100%",
                                                 padding: "6px 8px",
@@ -433,9 +433,9 @@ export function Inspector({
                                     <FieldRow label="Height">
                                         <input
                                             type="number"
-                                            value={footerPx}
+                                            value={footerPt}
                                             min={0}
-                                            onChange={(e) => updateRepeatAreaHeightPx(preset.id, "footer", clampInt(Number(e.target.value), 0, 600))}
+                                            onChange={(e) => updateRepeatAreaHeightPt(preset.id, "footer", clampInt(Number(e.target.value), 0, 600))}
                                             style={{
                                                 width: "100%",
                                                 padding: "6px 8px",

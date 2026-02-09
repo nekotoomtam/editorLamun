@@ -7,8 +7,8 @@ export { addNode, addNodeToTarget, updateNode } from "./nodes";
 export {
     ensureHeaderFooter,
     ensureHFCloneForPreset,
-    clampRepeatAreaHeightPx,
-    clampRepeatAreaHeightPxForPreset,
+    clampRepeatAreaHeightPt,
+    clampRepeatAreaHeightPtForPreset,
     setRepeatAreaAnchorToMargins,
     DEFAULT_HF_CONSTRAINTS,
 } from "./headerFooter";

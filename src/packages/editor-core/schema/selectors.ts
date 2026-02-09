@@ -67,8 +67,8 @@ export function getEffectiveHeaderFooterHeights(doc: DocumentJson, pageId: Id): 
     const hf = doc.headerFooterByPresetId?.[page.presetId];
     if (!hf) return { headerH: 0, footerH: 0, headerAnchorToMargins: true, footerAnchorToMargins: true };
 
-    const headerH = page.headerHidden ? 0 : (hf.header?.heightPx ?? 0);
-    const footerH = page.footerHidden ? 0 : (hf.footer?.heightPx ?? 0);
+    const headerH = page.headerHidden ? 0 : (hf.header?.heightPt ?? 0);
+    const footerH = page.footerHidden ? 0 : (hf.footer?.heightPt ?? 0);
 
     return {
         headerH,
@@ -133,4 +133,3 @@ export function getEffectivePageMetrics(doc: DocumentJson, pageId: Id) {
         lines: rects.lines,
     };
 }
-

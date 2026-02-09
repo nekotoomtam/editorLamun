@@ -69,9 +69,9 @@ export function normalizeDocToPt(doc: DocumentJson): DocumentJson {
   });
   const toRepeatArea = (area: RepeatArea): RepeatArea => ({
     ...area,
-    heightPx: toPt(area.heightPx),
-    minHeightPx: area.minHeightPx === undefined ? undefined : toPt(area.minHeightPx),
-    maxHeightPx: area.maxHeightPx === undefined ? undefined : toPt(area.maxHeightPx),
+    heightPt: toPt(area.heightPt),
+    minHeightPt: area.minHeightPt === undefined ? undefined : toPt(area.minHeightPt),
+    maxHeightPt: area.maxHeightPt === undefined ? undefined : toPt(area.maxHeightPt),
   });
 
   const pagePresetsById: DocumentJson["pagePresetsById"] = {};

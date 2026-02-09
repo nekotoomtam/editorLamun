@@ -126,10 +126,10 @@ type DocStore = {
         target: "page" | "header" | "footer"
     ) => { nodesById: Record<Id, NodeJson>; nodeOrder: Id[] };
 
-    setPresetHeaderHeightPx: (presetId: Id, heightPx: number) => void;
-    setPresetFooterHeightPx: (presetId: Id, heightPx: number) => void;
+    setPresetHeaderHeightPt: (presetId: Id, heightPt: number) => void;
+    setPresetFooterHeightPt: (presetId: Id, heightPt: number) => void;
     setPageHeaderFooterHidden: (pageId: Id, patch: { headerHidden?: boolean; footerHidden?: boolean }) => void;
-    updateRepeatAreaHeightPx: (presetId: Id, kind: "header" | "footer", heightPx: number) => void;
+    updateRepeatAreaHeightPt: (presetId: Id, kind: "header" | "footer", heightPt: number) => void;
     updateRepeatAreaAnchorToMargins: (presetId: Id, kind: "header" | "footer", anchorToMargins: boolean) => void;
 };
 
@@ -258,10 +258,10 @@ export function EditorStoreProvider({
 
             getNodesByTarget: (pageId, target) => Sel.getNodesByTarget(doc, pageId, target),
 
-            setPresetHeaderHeightPx: hfActions.setPresetHeaderHeightPx,
-            setPresetFooterHeightPx: hfActions.setPresetFooterHeightPx,
+            setPresetHeaderHeightPt: hfActions.setPresetHeaderHeightPt,
+            setPresetFooterHeightPt: hfActions.setPresetFooterHeightPt,
             setPageHeaderFooterHidden: hfActions.setPageHeaderFooterHidden,
-            updateRepeatAreaHeightPx: hfActions.updateRepeatAreaHeightPx,
+            updateRepeatAreaHeightPt: hfActions.updateRepeatAreaHeightPt,
             updateRepeatAreaAnchorToMargins: hfActions.updateRepeatAreaAnchorToMargins,
         };
     }, [doc, history, docHistory, pagesActions, presetsActions, hfActions]);

@@ -76,10 +76,10 @@ export function bootstrapAllPresetHF(d: DocumentJson): DocumentJson {
     // ✅ Normalize/clamp HF heights once at load time so the runtime state is always valid.
     // Rule: header/footer may change freely but must leave body at least minBodyPx inside
     // the content area (pageH after subtracting top/bottom margins).
-    const h = Cmd.clampRepeatAreaHeightPxForPreset(draft, presetId, "header", hf.header.heightPx ?? 0);
-    hf.header.heightPx = h;
-    const f = Cmd.clampRepeatAreaHeightPxForPreset(draft, presetId, "footer", hf.footer.heightPx ?? 0);
-    hf.footer.heightPx = f;
+    const h = Cmd.clampRepeatAreaHeightPtForPreset(draft, presetId, "header", hf.header.heightPt ?? 0);
+    hf.header.heightPt = h;
+    const f = Cmd.clampRepeatAreaHeightPtForPreset(draft, presetId, "footer", hf.footer.heightPt ?? 0);
+    hf.footer.heightPt = f;
   }
 
   return draft;

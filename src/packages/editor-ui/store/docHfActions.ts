@@ -6,14 +6,14 @@ export type ApplyDoc = (mut: (draft: DocumentJson) => void, opts?: { recordHisto
 export function createDocHfActions(args: { applyDoc: ApplyDoc }) {
     const { applyDoc } = args;
 
-    function setPresetHeaderHeightPx(presetId: Id, heightPx: number) {
+    function setPresetHeaderHeightPt(presetId: Id, heightPt: number) {
         // ✅ Always clamp via core rule to prevent invalid states.
-        updateRepeatAreaHeightPx(presetId, "header", heightPx);
+        updateRepeatAreaHeightPt(presetId, "header", heightPt);
     }
 
-    function setPresetFooterHeightPx(presetId: Id, heightPx: number) {
+    function setPresetFooterHeightPt(presetId: Id, heightPt: number) {
         // ✅ Always clamp via core rule to prevent invalid states.
-        updateRepeatAreaHeightPx(presetId, "footer", heightPx);
+        updateRepeatAreaHeightPt(presetId, "footer", heightPt);
     }
 
     function setPageHeaderFooterHidden(pageId: Id, patch: { headerHidden?: boolean; footerHidden?: boolean }) {
@@ -24,13 +24,13 @@ export function createDocHfActions(args: { applyDoc: ApplyDoc }) {
         });
     }
 
-    function updateRepeatAreaHeightPx(presetId: Id, kind: "header" | "footer", heightPx: number) {
+    function updateRepeatAreaHeightPt(presetId: Id, kind: "header" | "footer", heightPt: number) {
         applyDoc((draft) => {
             const hf = Cmd.ensureHFCloneForPreset(draft, presetId);
-            const clamped = Cmd.clampRepeatAreaHeightPxForPreset(draft, presetId, kind, heightPx);
+            const clamped = Cmd.clampRepeatAreaHeightPtForPreset(draft, presetId, kind, heightPt);
 
-            if (kind === "header") hf.header.heightPx = clamped;
-            else hf.footer.heightPx = clamped;
+            if (kind === "header") hf.header.heightPt = clamped;
+            else hf.footer.heightPt = clamped;
         });
     }
 
@@ -41,10 +41,10 @@ export function createDocHfActions(args: { applyDoc: ApplyDoc }) {
     }
 
     return {
-        setPresetHeaderHeightPx,
-        setPresetFooterHeightPx,
+        setPresetHeaderHeightPt,
+        setPresetFooterHeightPt,
         setPageHeaderFooterHidden,
-        updateRepeatAreaHeightPx,
+        updateRepeatAreaHeightPt,
         updateRepeatAreaAnchorToMargins,
     };
 }

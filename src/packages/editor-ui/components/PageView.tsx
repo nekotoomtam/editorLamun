@@ -52,7 +52,7 @@ export function PageView({
         setEditingTarget,
         getNodesByTarget,
         setSelectedNodeIds,
-        updateRepeatAreaHeightPx,   // ✅ เพิ่ม
+        updateRepeatAreaHeightPt,   // ✅ เพิ่ม
     } = useEditorStore();
 
     const editingTarget = session.editingTarget ?? "page";
@@ -131,7 +131,7 @@ export function PageView({
     const storeFnsRef = useRef({
         updatePresetMargin,
         updatePageMargin,
-        updateRepeatAreaHeightPx,
+        updateRepeatAreaHeightPt,
         setEditingTarget,
         setSelectedNodeIds,
     });
@@ -139,11 +139,11 @@ export function PageView({
         storeFnsRef.current = {
             updatePresetMargin,
             updatePageMargin,
-            updateRepeatAreaHeightPx,
+            updateRepeatAreaHeightPt,
             setEditingTarget,
             setSelectedNodeIds,
         };
-    }, [updatePresetMargin, updatePageMargin, updateRepeatAreaHeightPx, setEditingTarget, setSelectedNodeIds]);
+    }, [updatePresetMargin, updatePageMargin, updateRepeatAreaHeightPt, setEditingTarget, setSelectedNodeIds]);
 
 
 
@@ -220,14 +220,14 @@ export function PageView({
         const z = hfZoneRef.current;
         const m = previewMarginRef.current ?? baseMargin;
         const contentH = Math.max(0, pageH - Math.max(0, m.top) - Math.max(0, m.bottom));
-        return Cmd.clampRepeatAreaHeightPx({
+        return Cmd.clampRepeatAreaHeightPt({
             kind: "header",
-            desiredPx: nextHeaderH,
+            desiredPt: nextHeaderH,
             pageH,
             contentH,
-            otherPx: footerH,
-            areaMinPx: z?.header?.minHeightPx,
-            areaMaxPx: z?.header?.maxHeightPx,
+            otherPt: footerH,
+            areaMinPt: z?.header?.minHeightPt,
+            areaMaxPt: z?.header?.maxHeightPt,
         });
     }
 
@@ -235,14 +235,14 @@ export function PageView({
         const z = hfZoneRef.current;
         const m = previewMarginRef.current ?? baseMargin;
         const contentH = Math.max(0, pageH - Math.max(0, m.top) - Math.max(0, m.bottom));
-        return Cmd.clampRepeatAreaHeightPx({
+        return Cmd.clampRepeatAreaHeightPt({
             kind: "footer",
-            desiredPx: nextFooterH,
+            desiredPt: nextFooterH,
             pageH,
             contentH,
-            otherPx: headerH,
-            areaMinPx: z?.footer?.minHeightPx,
-            areaMaxPx: z?.footer?.maxHeightPx,
+            otherPt: headerH,
+            areaMinPt: z?.footer?.minHeightPt,
+            areaMaxPt: z?.footer?.maxHeightPt,
         });
     }
 
@@ -514,12 +514,12 @@ export function PageView({
                     const raw = ctxHF.startHeaderH + dy;
                     const curFooterH = previewFooterHRef.current ?? hfRef.current.footerH;
                     const next = clampHeader(raw, curFooterH, ctxHF.pageH);
-                    fns.updateRepeatAreaHeightPx(ctxHF.presetId, "header", roundInt(next));
+                    fns.updateRepeatAreaHeightPt(ctxHF.presetId, "header", roundInt(next));
                 } else {
                     const raw = ctxHF.startFooterH - dy;
                     const curHeaderH = previewHeaderHRef.current ?? hfRef.current.headerH;
                     const next = clampFooter(raw, curHeaderH, ctxHF.pageH);
-                    fns.updateRepeatAreaHeightPx(ctxHF.presetId, "footer", roundInt(next));
+                    fns.updateRepeatAreaHeightPt(ctxHF.presetId, "footer", roundInt(next));
                 }
 
                 hfDragRef.current = null;

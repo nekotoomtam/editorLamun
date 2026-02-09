@@ -37,7 +37,7 @@ export type MarginSource = "preset" | "page";
 export type RepeatArea = {
     id: Id;
     name?: string;
-    heightPx: number;        // ใช้จริง
+    heightPt: number;        // ใช้จริง
     /**
      * ถ้า true: วาง repeat area อิงภายใต้ margin (content area)
      * - header: เริ่มที่ marginTop
@@ -47,8 +47,8 @@ export type RepeatArea = {
      * NOTE: กฎ constraint (min body) ยังใช้ content area เหมือนเดิม
      */
     anchorToMargins?: boolean;
-    minHeightPx?: number;    // clamp
-    maxHeightPx?: number;    // clamp
+    minHeightPt?: number;    // clamp
+    maxHeightPt?: number;    // clamp
     /**
      * Phase-1 decision:
      * - Nodes are stored globally in DocumentJson.nodesById
