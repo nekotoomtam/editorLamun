@@ -2,7 +2,7 @@
 
 import React from "react";
 import type { DocumentJson, NodeJson, AssetImage } from "../../editor-core/schema";
-import { ptToPx } from "../../editor-core/unitConversion";
+import { ptToPx } from "../utils/units";
 import { useEditorSessionStore } from "../store/editorStore";
 
 type ImageFit = "contain" | "cover" | "stretch";

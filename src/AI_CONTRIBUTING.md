@@ -39,9 +39,11 @@
 - Renderer มีหน้าที่แสดงผล ไม่ใช่ตัดสินใจ
 - Virtualization เป็น optimization เท่านั้น
 - Document ต้อง migrate ก่อนใช้งาน
-- Document geometry ต้องเก็บเป็น **pt100 (integer) เท่านั้น**
-- Unit conversion ทำได้เฉพาะที่ boundary (UI layer)
-- editor-core ห้ามแปลง unit
+- Document geometry must be stored in **pt (floating-point number)** only
+- No px / mm / cm may be serialized into DocumentJson
+- Unit conversion happens **only at layer boundaries (UI layer)**
+- editor-core must NEVER perform unit conversion
+
 - ถ้าไม่แน่ใจ **ห้ามเปลี่ยน architecture**
 
 ---
@@ -117,10 +119,10 @@ AI ต้องตรวจสอบเสมอว่าโค้ดที่�
 
 - drag / resize:
   - ระหว่างทำ = uiState (preview)
-  - ตอนจบ = commit operation เดียว (pt100 เท่านั้น)
+  - ตอนจบ = commit operation เดียว (pt เท่านั้น)
 
 - UI อาจใช้ float ระหว่าง interaction
-- ก่อน dispatch ทุกค่าต้องถูก convert เป็น pt100
+- Before dispatch, all values must be converted to pt
 
 ---
 

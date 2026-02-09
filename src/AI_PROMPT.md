@@ -41,13 +41,13 @@ You must assume these facts are always true:
 
 ## Unit & Geometry Law (Critical)
 
-- All document geometry is stored as **pt100 (integer)** only
-- pt100 = 1/100 pt (1 pt = 1/72 inch)
+- All document geometry is stored as **pt (floating-point number)** only
+- 1 pt = 1/72 inch
 - No px / mm / cm may be serialized into DocumentJson
-- Unit conversion happens **only at layer boundaries**
+Unit conversion happens **only at layer boundaries (UI layer)**
 - editor-core must NEVER perform unit conversion
 - UI may use floating-point values during interaction
-- Before dispatch/commit, all values MUST be converted to pt100
+- Before dispatch/commit, all values MUST be converted to pt
 
 ---
 
@@ -60,7 +60,7 @@ You must assume these facts are always true:
 - ui:
   - interaction, preview, transient state
   - may use float during interaction
-  - must commit pt100 only
+  - must commit pt only
 
 - renderer / export:
   - presentation only

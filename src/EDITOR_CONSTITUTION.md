@@ -74,17 +74,15 @@
 
 ### C3. Coordinate & Unit Consistency
 
-* Document geometry (position, size, margin, spacing) must be stored in **pt100 (integer)** only
-* pt100 = 1/100 pt (1 pt = 1/72 inch)
+* Document geometry (position, size, margin, spacing) must be stored in **pt** only
+* 1 pt = 1/72 inch
+* `unit` in DocumentJson must be `"pt"` (core truth)
 * px is **for UI / viewport rendering only** and must never be serialized into the document
 * zoom / scale is applied at the UI boundary only
-* snap / grid / guides must operate in pt100 (or units converted to pt100 before use)
-
+* snap / grid / guides must operate in pt
 
 * UI may use floating-point values during interaction (typing, dragging, preview)
-* Only committed document state may enter the core, and it must be converted to pt100
-* UI display precision must not exceed commit precision
-
+* Only committed document state may enter the core, and it must already be in pt
 
 ---
 
@@ -143,8 +141,10 @@
   * nodeOrder ต้องชี้ node ที่มีจริง
   * ลบ page ต้อง cleanup nodes / order / selection ให้ครบ
 
-* All document geometry values must be integers (pt100)
-* No document field may imply another unit (e.g. Px, Mm, Cm)
+* All document geometry values must be finite numbers in pt (no NaN / Infinity)
+* No document field may imply another unit (e.g. px, mm, cm)
+* Negative geometry is forbidden unless explicitly defined by the schema (default: forbid)
+
 ---
 
 ## F) Additional Laws (เสริม)
@@ -166,7 +166,9 @@
 
 * All unit conversions must happen at layer boundaries
 * editor-core never converts units
-* UI is responsible for converting user input to pt100 before dispatch
+* UI is responsible for converting user input and viewport measurements (px) to pt before dispatch
+* Legacy documents (if any) must be migrated to pt on load (read → migrate → use latest)
+
 ---
 
 ## Final Rule

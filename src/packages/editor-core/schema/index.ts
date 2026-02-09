@@ -1,5 +1,5 @@
 export type Id = string;
-export type Unit = "px" | "pt";
+export type Unit = "pt";
 
 /**
  * Create a reasonably unique id.

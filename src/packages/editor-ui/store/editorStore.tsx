@@ -7,6 +7,7 @@ import { createInitialSession, createSessionStore, type SessionOnlyStore } from 
 import { createDocPresetsActions } from "./docPresetsActions";
 import { createDocPagesActions } from "./docPagesActions";
 import { bootstrapAllPresetHF } from "./editorBootstrap";
+import { runNormalizeDocToPtSelfTest } from "../dev/normalizeDocToPtSelfTest";
 import { createDocHfActions } from "./docHfActions";
 import type { EditorSession } from "../../editor-core/editorSession";
 import type { PaperKey } from "./paperSizes";
@@ -15,6 +16,7 @@ import * as Cmd from "../../editor-core/commands/docCommands";
 import { normalizeDocToPt } from "../../editor-core/commands/normalize";
 
 const __DEV__ = process.env.NODE_ENV !== "production";
+let __didRunMigrationSelfTest = false;
 
 function assertDocInvariant(doc: DocumentJson) {
     if (doc.version !== DOC_VERSION_LATEST) {
@@ -71,6 +73,74 @@ function assertSelectionInvariant(doc: DocumentJson, session: EditorSession) {
     for (const id of session.selectedNodeIds ?? []) {
         if (!doc.nodesById?.[id]) {
             throw new Error(`Invariant: selectedNodeIds references missing node ${id}.`);
+        }
+    }
+}
+
+function assertFiniteGeometry(doc: DocumentJson) {
+    const isFiniteNumber = (v: number) => Number.isFinite(v);
+
+    for (const preset of Object.values(doc.pagePresetsById ?? {})) {
+        if (!isFiniteNumber(preset.size.width) || !isFiniteNumber(preset.size.height)) {
+            throw new Error("Invariant: preset size must be finite numbers.");
+        }
+        const m = preset.margin;
+        if (!isFiniteNumber(m.top) || !isFiniteNumber(m.right) || !isFiniteNumber(m.bottom) || !isFiniteNumber(m.left)) {
+            throw new Error("Invariant: preset margin must be finite numbers.");
+        }
+    }
+
+    for (const page of Object.values(doc.pagesById ?? {})) {
+        const m = page.marginOverride;
+        if (m) {
+            if (!isFiniteNumber(m.top) || !isFiniteNumber(m.right) || !isFiniteNumber(m.bottom) || !isFiniteNumber(m.left)) {
+                throw new Error("Invariant: page marginOverride must be finite numbers.");
+            }
+        }
+    }
+
+    for (const node of Object.values(doc.nodesById ?? {})) {
+        if (!isFiniteNumber(node.x) || !isFiniteNumber(node.y) || !isFiniteNumber(node.w) || !isFiniteNumber(node.h)) {
+            throw new Error("Invariant: node geometry must be finite numbers.");
+        }
+        if (node.type === "text") {
+            const st: any = node.style;
+            if (!isFiniteNumber(st.fontSize) || !isFiniteNumber(st.lineHeight)) {
+                throw new Error("Invariant: text style geometry must be finite numbers.");
+            }
+            if (st.letterSpacing !== undefined && !isFiniteNumber(st.letterSpacing)) {
+                throw new Error("Invariant: text letterSpacing must be finite numbers.");
+            }
+        }
+        if (node.type === "box") {
+            const st: any = node.style;
+            if (st.strokeWidth !== undefined && !isFiniteNumber(st.strokeWidth)) {
+                throw new Error("Invariant: box strokeWidth must be finite numbers.");
+            }
+            if (st.radius !== undefined && !isFiniteNumber(st.radius)) {
+                throw new Error("Invariant: box radius must be finite numbers.");
+            }
+        }
+    }
+
+    for (const hf of Object.values(doc.headerFooterByPresetId ?? {})) {
+        const areas = [hf.header, hf.footer];
+        for (const area of areas) {
+            if (area.heightPt !== undefined && !isFiniteNumber(area.heightPt)) {
+                throw new Error("Invariant: header/footer heightPt must be finite numbers.");
+            }
+            if (area.minHeightPt !== undefined && !isFiniteNumber(area.minHeightPt)) {
+                throw new Error("Invariant: header/footer minHeightPt must be finite numbers.");
+            }
+            if (area.maxHeightPt !== undefined && !isFiniteNumber(area.maxHeightPt)) {
+                throw new Error("Invariant: header/footer maxHeightPt must be finite numbers.");
+            }
+        }
+    }
+
+    for (const guide of Object.values(doc.guides?.byId ?? {})) {
+        if (!isFiniteNumber(guide.pos)) {
+            throw new Error("Invariant: guide position must be a finite number.");
         }
     }
 }
@@ -149,6 +219,16 @@ export function EditorStoreProvider({
 }) {
     const initial = useMemo(() => {
         const d = bootstrapAllPresetHF(normalizeDocToPt(initialDoc));
+        if (__DEV__) {
+            if (process.env.RUN_MIGRATION_SELFTEST === "1" && !__didRunMigrationSelfTest) {
+                __didRunMigrationSelfTest = true;
+                runNormalizeDocToPtSelfTest();
+            }
+            if (d.unit !== "pt") {
+                throw new Error(`Invariant: doc.unit must be "pt" after migration.`);
+            }
+            assertFiniteGeometry(d);
+        }
         const firstPageId = d.pageOrder?.[0] ?? null;
         return { doc: d, firstPageId };
     }, [initialDoc]);

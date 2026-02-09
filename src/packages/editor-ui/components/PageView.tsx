@@ -6,7 +6,7 @@ import { NodeView } from "./NodeView";
 import * as Sel from "../../editor-core/schema/selectors";
 import { computePageRects } from "../../editor-core/geometry/pageMetrics";
 import * as Cmd from "../../editor-core/commands/docCommands";
-import { ptToPx } from "../../editor-core/unitConversion";
+import { ptToPx } from "../utils/units";
 import { useEditorStore } from "../store/editorStore"; // ✅ เพิ่ม
 import { clientToPageDelta, clientToPagePoint } from "../utils/coords";
 

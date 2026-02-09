@@ -1,5 +1,4 @@
 import type { DocumentJson, Id, PageJson, RepeatArea } from "../schema";
-import { pxToPt } from "../unitConversion";
 import { clampMargin } from "./margins";
 
 /**
@@ -55,9 +54,14 @@ export function normalizeDocMargins(doc: DocumentJson): boolean {
   return changed;
 }
 
-export function normalizeDocToPt(doc: DocumentJson): DocumentJson {
+const PT_PER_PX = 0.75;
+const pxToPt = (px: number) => px * PT_PER_PX;
+
+type LegacyPxDoc = DocumentJson & { unit: "px" };
+
+export function normalizeDocToPt(doc: DocumentJson | LegacyPxDoc): DocumentJson {
   if (doc.unit !== "px") {
-    return doc;
+    return doc as DocumentJson;
   }
 
   const toPt = (value: number) => pxToPt(value);

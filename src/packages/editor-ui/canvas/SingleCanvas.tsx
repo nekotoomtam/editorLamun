@@ -1,7 +1,7 @@
 import React from "react";
 
 import type { DocumentJson, Id, PageJson } from "../../editor-core/schema";
-import { ptToPx } from "../../editor-core/unitConversion";
+import { ptToPx } from "../utils/units";
 
 import { PageView } from "../components/PageView";
 import { CANVAS_CONFIG } from "./canvasConfig";
