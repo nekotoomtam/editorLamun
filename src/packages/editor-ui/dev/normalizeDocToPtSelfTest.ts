@@ -67,19 +67,19 @@ export function runNormalizeDocToPtSelfTest() {
     },
   };
 
-  const next = normalizeDocToPt(legacy);
-  if (next.unit !== "pt") {
-    throw new Error(`normalizeDocToPt self-test failed (unit): ${next.unit} !== pt`);
+  let thrown: unknown = null;
+  try {
+    normalizeDocToPt(legacy as unknown as DocumentJson);
+  } catch (err) {
+    thrown = err;
   }
 
-  assertEqual("preset.size.width", next.pagePresetsById.p1.size.width, 75);
-  assertEqual("preset.size.height", next.pagePresetsById.p1.size.height, 150);
-  assertEqual("preset.margin.top", next.pagePresetsById.p1.margin.top, 7.5);
-  assertEqual("page.marginOverride.left", next.pagesById["page-1"].marginOverride!.left, 33);
-  assertEqual("node.x", next.nodesById["text-1"].x, 6);
-  assertEqual("node.w", next.nodesById["text-1"].w, 60);
-  assertEqual("text.fontSize", (next.nodesById["text-1"] as any).style.fontSize, 9);
-  assertEqual("text.lineHeight", (next.nodesById["text-1"] as any).style.lineHeight, 13.5);
-  assertEqual("hf.header.heightPt", next.headerFooterByPresetId!.p1.header.heightPt!, 37.5);
-  assertEqual("guide.pos", next.guides!.byId.g1.pos, 52.5);
+  if (!(thrown instanceof Error)) {
+    throw new Error("normalizeDocToPt self-test failed (guard): expected Error for unit:px");
+  }
+  assertEqual(
+    "guard message includes unsupported px",
+    Number(thrown.message.includes("unit:'px'")),
+    1
+  );
 }

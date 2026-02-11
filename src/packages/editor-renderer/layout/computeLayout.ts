@@ -74,15 +74,15 @@ export function computeLayout(document: DocumentJson): DocumentLayout {
                     nodeOrder: footerTarget.nodeOrder,
                     nodesById: footerTarget.nodesById,
                     offsetX: m.contentRect?.x ?? 0,
-                    offsetY: m.footerRect?.y ?? (m.pageH - m.footerH),
+                    offsetY: m.footerRect?.y ?? (m.pageHPt - m.footerH),
                 })
                 : []),
         ];
 
         return {
             page,
-            pageWidth: m.pageW,
-            pageHeight: m.pageH,
+            pageWidth: m.pageWPt,
+            pageHeight: m.pageHPt,
             bodyRect: m.bodyRect,
             headerH: m.headerH,
             footerH: m.footerH,

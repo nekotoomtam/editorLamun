@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { Id, PageJson } from "../../editor-core/schema";
+import type { Id, PageJson } from "../../../editor-core/schema";
 
 export function useGapVisibility(opts: {
     pages: PageJson[];

@@ -27,18 +27,18 @@ export function clientToPagePoint(
     el: HTMLElement,
     clientX: number,
     clientY: number,
-    pageW: number,
-    pageH: number
+    pageWPt: number,
+    pageHPt: number
 ): PageSpacePoint {
     const rect = el.getBoundingClientRect();
-    const safeW = pageW || 1;
-    const safeH = pageH || 1;
+    const safeW = pageWPt || 1;
+    const safeH = pageHPt || 1;
     const scaleX = rect.width / safeW || 1;
     const scaleY = rect.height / safeH || 1;
     const xPt = (clientX - rect.left) / scaleX;
     const yPt = (clientY - rect.top) / scaleY;
-    const clampedX = Math.max(0, Math.min(pageW, xPt));
-    const clampedY = Math.max(0, Math.min(pageH, yPt));
+    const clampedX = Math.max(0, Math.min(pageWPt, xPt));
+    const clampedY = Math.max(0, Math.min(pageHPt, yPt));
     return { px: clampedX, py: clampedY, scaleX, scaleY, rect };
 }
 

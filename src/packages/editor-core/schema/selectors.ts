@@ -87,7 +87,7 @@ export function getBodyContentRect(doc: DocumentJson, pageId: Id) {
     const m = getEffectivePageMetrics(doc, pageId);
     if (!m) return null;
     const { x, y, w, h } = m.bodyRect;
-    return { x, y, w, h, headerH: m.headerH, footerH: m.footerH, pageW: m.pageW, pageH: m.pageH };
+    return { x, y, w, h, headerH: m.headerH, footerH: m.footerH, pageW: m.pageWPt, pageH: m.pageHPt };
 }
 
 
@@ -103,15 +103,15 @@ export function getEffectivePageMetrics(doc: DocumentJson, pageId: Id) {
 
     const { headerH, footerH, headerAnchorToMargins, footerAnchorToMargins } = getEffectiveHeaderFooterHeights(doc, pageId);
 
-    const pageW = preset.size.width;
-    const pageH = preset.size.height;
+    const pageWPt = preset.size.width;
+    const pageHPt = preset.size.height;
 
     const rects = computePageRects({
-        pageW,
-        pageH,
+        pageWPt,
+        pageHPt,
         margin,
-        headerH,
-        footerH,
+        headerHPt: headerH,
+        footerHPt: footerH,
         headerAnchorToMargins,
         footerAnchorToMargins,
     });
@@ -124,8 +124,8 @@ export function getEffectivePageMetrics(doc: DocumentJson, pageId: Id) {
         footerH,
         headerAnchorToMargins,
         footerAnchorToMargins,
-        pageW,
-        pageH,
+        pageWPt,
+        pageHPt,
         contentRect: rects.contentRect,
         bodyRect: rects.bodyRect,
         headerRect: rects.headerRect,

@@ -20,15 +20,15 @@ export function SingleCanvas(props: {
     if (!page) return <div>no page</div>;
 
     const preset = document.pagePresetsById?.[page.presetId];
-    const pageW = preset?.size?.width ?? 820;
-    const pageH = preset?.size?.height ?? 1100;
-    const pageWpx = ptToPx(pageW);
-    const pageHpx = ptToPx(pageH);
+    const pageWPt = preset?.size?.width ?? 820;
+    const pageHPt = preset?.size?.height ?? 1100;
+    const pageWPx = ptToPx(pageWPt);
+    const pageHPx = ptToPx(pageHPt);
 
     return (
         <div style={{ padding: CANVAS_CONFIG.paddingPx }}>
-            <div style={{ width: pageWpx * zoom, height: pageHpx * zoom, margin: "0 auto", position: "relative" }}>
-                <div style={{ transform: `scale(${zoom})`, transformOrigin: "top left", width: pageWpx, height: pageHpx }}>
+            <div style={{ width: pageWPx * zoom, height: pageHPx * zoom, margin: "0 auto", position: "relative" }}>
+                <div style={{ transform: `scale(${zoom})`, transformOrigin: "top left", width: pageWPx, height: pageHPx }}>
                     <PageView
                         document={document}
                         page={page}

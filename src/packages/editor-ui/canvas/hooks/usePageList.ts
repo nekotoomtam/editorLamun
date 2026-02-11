@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { DocumentJson, PageJson } from "../../editor-core/schema";
+import type { DocumentJson, PageJson } from "../../../editor-core/schema";
 
 export function usePageList(document: DocumentJson) {
     return useMemo(() => {
