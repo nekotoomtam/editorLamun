@@ -102,7 +102,7 @@ export function createDocPresetsActions(args: {
                 id: presetId,
                 name: draftInput.name,
                 size,
-                margin: { top: 10, right: 10, bottom: 10, left: 10 },
+                margin: { top: 1000, right: 1000, bottom: 1000, left: 1000 },
                 source: "custom",
                 locked: false,
             };

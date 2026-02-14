@@ -4,6 +4,7 @@ import React, { useMemo, useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { DocumentJson, PageJson, Id } from "../editor-core/schema";
 import { PageView } from "./components/PageView";
+import { pt100ToPx } from "./utils/units";
 
 type Mode = "list" | "thumb";
 const MODE_KEY = "editor:leftPanelMode";
@@ -236,11 +237,13 @@ export function PagesPanel({
                     <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
                         {pages.map((p, i) => {
                             const preset = presetById[p.presetId];
-                            const pw = preset?.size?.width ?? 820;
-                            const ph = preset?.size?.height ?? 1100;
+                            const pw = preset?.size?.width ?? 82000;
+                            const ph = preset?.size?.height ?? 110000;
+                            const pwPx = pt100ToPx(pw);
+                            const phPx = pt100ToPx(ph);
 
-                            const scale = THUMB_W / pw;
-                            const thumbH = Math.round(ph * scale);
+                            const scale = THUMB_W / pwPx;
+                            const thumbH = Math.round(phPx * scale);
 
                             const viewing = p.id === viewingPageId;
                             const active = p.id === activePageId;
@@ -393,8 +396,8 @@ export function PagesPanel({
                                         >
                                             <div
                                                 style={{
-                                                    width: pw,
-                                                    height: ph,
+                                                    width: pwPx,
+                                                    height: phPx,
                                                     transform: `scale(${scale})`,
                                                     transformOrigin: "top left",
                                                 }}

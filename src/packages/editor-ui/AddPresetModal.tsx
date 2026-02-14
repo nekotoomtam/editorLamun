@@ -1,13 +1,13 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import type { DocumentJson, Id, PagePreset } from "../editor-core/schema";
+import { pt100ToPt, type DocumentJson, type Id, type PagePreset } from "../editor-core/schema";
 
 const PAPER_PRESETS = [
-    { key: "A4", name: "A4", w: 595, h: 842 },
-    { key: "A3", name: "A3", w: 842, h: 1191 },
-    { key: "LETTER", name: "Letter", w: 612, h: 792 },
-    { key: "LEGAL", name: "Legal", w: 612, h: 1008 },
+    { key: "A4", name: "A4", w: 59500, h: 84200 },
+    { key: "A3", name: "A3", w: 84200, h: 119100 },
+    { key: "LETTER", name: "Letter", w: 61200, h: 79200 },
+    { key: "LEGAL", name: "Legal", w: 61200, h: 100800 },
 ] as const;
 
 type PaperKey = (typeof PAPER_PRESETS)[number]["key"];
@@ -37,7 +37,7 @@ function guessPaperKeyFromSize(w: number, h: number): PaperKey {
 
     // threshold กันมั่ว (ถ้าห่างมากให้ default A4)
     if (!best) return "A4";
-    return best.score <= 120 ? best.key : "A4";
+    return best.score <= 12000 ? best.key : "A4";
 }
 
 function getPaper(paperKey: PaperKey) {
@@ -505,7 +505,7 @@ export function AddPresetModal({
                                 </div>
                                 <div style={{ fontWeight: 700, color: "#111827" }}>{cloneLabel}</div>
                                 <div style={{ fontSize: 12, color: "#6b7280" }}>
-                                    {displayW} × {displayH} pt (ประมาณ)
+                                    {pt100ToPt(displayW)} × {pt100ToPt(displayH)} pt (ประมาณ)
                                 </div>
                             </div>
 
@@ -690,7 +690,7 @@ export function AddPresetModal({
                                 {ori === "portrait" ? "Portrait" : "Landscape"}
                             </div>
                             <div style={{ fontSize: 12, color: "#6b7280" }}>
-                                {displayW} × {displayH} pt
+                                {pt100ToPt(displayW)} × {pt100ToPt(displayH)} pt
                             </div>
                         </div>
                     </div>

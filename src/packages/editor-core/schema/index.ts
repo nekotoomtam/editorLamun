@@ -1,5 +1,9 @@
 export type Id = string;
 export type Unit = "pt";
+export type Pt100 = number;
+export const PT100_SCALE = 100;
+export function ptToPt100(pt: number): Pt100 { return Math.round(pt * PT100_SCALE); }
+export function pt100ToPt(v: Pt100): number { return v / PT100_SCALE; }
 
 /**
  * Create a reasonably unique id.
@@ -26,10 +30,10 @@ export const DOC_VERSION_LATEST = 1 as const;
 export type DocVersion = number;
 
 export type Margin = {
-    top: number;
-    right: number;
-    bottom: number;
-    left: number;
+    top: Pt100;
+    right: Pt100;
+    bottom: Pt100;
+    left: Pt100;
 };
 export type MarginPatch = Partial<Margin>;
 export type MarginSource = "preset" | "page";
@@ -37,7 +41,7 @@ export type MarginSource = "preset" | "page";
 export type RepeatArea = {
     id: Id;
     name?: string;
-    heightPt: number;        // ใช้จริง
+    heightPt: Pt100;        // ใช้จริง
     /**
      * ถ้า true: วาง repeat area อิงภายใต้ margin (content area)
      * - header: เริ่มที่ marginTop
@@ -47,8 +51,8 @@ export type RepeatArea = {
      * NOTE: กฎ constraint (min body) ยังใช้ content area เหมือนเดิม
      */
     anchorToMargins?: boolean;
-    minHeightPt?: number;    // clamp
-    maxHeightPt?: number;    // clamp
+    minHeightPt?: Pt100;    // clamp
+    maxHeightPt?: Pt100;    // clamp
     /**
      * Phase-1 decision:
      * - Nodes are stored globally in DocumentJson.nodesById
@@ -115,7 +119,7 @@ export type DocumentJson = {
 export type PagePreset = {
     id: Id;
     name: string;
-    size: { width: number; height: number };
+    size: { width: Pt100; height: Pt100 };
     margin: Margin;
     source?: "system" | "custom"
     locked?: boolean;              // ล็อกโครงกระดาษ
@@ -165,10 +169,10 @@ export type NodeBase = {
      * - สำหรับ owner.kind === 'page': x/y วัดจาก page origin
      * - สำหรับ header/footer: x/y วัดจาก zone origin (ยังเป็น page-space แต่ UI อาจ offset ตอน render)
      */
-    x: number;
-    y: number;
-    w: number;
-    h: number;
+    x: Pt100;
+    y: Pt100;
+    w: Pt100;
+    h: Pt100;
     rotation?: number;
 
     // แนะนำให้เลิกใช้ทีหลัง แต่เก็บไว้ได้ถ้าของเดิมยังต้องใช้
@@ -193,8 +197,8 @@ export type TextNode = NodeBase & {
     text: string;
     style: {
         fontFamily: string;
-        fontSize: number;
-        lineHeight: number;
+        fontSize: Pt100;
+        lineHeight: Pt100;
         color?: string;
         align: "left" | "center" | "right" | "justify";
         verticalAlign?: "top" | "middle" | "bottom";
@@ -204,8 +208,8 @@ export type TextNode = NodeBase & {
     };
     autosize?: {
         mode: "none" | "height";
-        minH?: number;
-        maxH?: number;
+        minH?: Pt100;
+        maxH?: Pt100;
     };
 };
 
@@ -214,8 +218,8 @@ export type BoxNode = NodeBase & {
     style: {
         fill?: string;
         stroke?: string;
-        strokeWidth?: number;
-        radius?: number;
+        strokeWidth?: Pt100;
+        radius?: Pt100;
     };
 };
 
@@ -226,7 +230,7 @@ export type ImageNode = NodeBase & {
     assetId: Id;
     fit: ImageFit;
     opacity?: number;
-    crop?: { x: number; y: number; w: number; h: number };
+    crop?: { x: Pt100; y: Pt100; w: Pt100; h: Pt100 };
 };
 
 export type GroupNode = NodeBase & {

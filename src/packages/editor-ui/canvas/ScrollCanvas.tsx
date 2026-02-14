@@ -14,7 +14,7 @@ import { useVirtualWindow } from "./hooks/useVirtualWindow";
 import { getRenderLevel } from "./utils";
 import type { CanvasNavigatorHandle } from "../CanvasView";
 import { CANVAS_CONFIG } from "./canvasConfig";
-import { ptToPx } from "../utils/units";
+import { pt100ToPx } from "../utils/units";
 
 function clamp(n: number, min: number, max: number) {
     return Math.max(min, Math.min(max, n));
@@ -118,23 +118,43 @@ export function ScrollCanvas(props: {
         });
     }, [pages, nav.navigateToPage]);
 
+
     // -------- Live zoom plumbing --------
     const contentElRef = useRef<HTMLDivElement | null>(null);
     const committedZoomRef = useRef(zoom);
     const liveZoomRef = useRef(zoom);
+    const lastEffectiveZoomRef = useRef(1);
     const zoomCommitTimerRef = useRef<number | null>(null);
 
-    const applyLiveZoom = React.useCallback((effectiveZoom: number) => {
+    const applyLiveZoom = React.useCallback((effectiveZoom: number, pointerClientY?: number) => {
         const base = committedZoomRef.current || 1;
         const extra = effectiveZoom / base;
         const el = contentElRef.current;
         if (!el) return;
+        const scrollEl = rootEl;
+        if (scrollEl) {
+            const z0 = lastEffectiveZoomRef.current || 1;
+            const z1 = effectiveZoom;
+            if (z0 > 0 && z1 > 0 && z0 !== z1) {
+                const rect = scrollEl.getBoundingClientRect();
+                const anchorYRaw = pointerClientY != null
+                    ? pointerClientY - rect.top
+                    : scrollEl.clientHeight / 2;
+                const anchorY = clamp(anchorYRaw, 0, scrollEl.clientHeight);
+                const s0 = scrollEl.scrollTop;
+                const paddingPx = CANVAS_CONFIG.paddingPx;
+                const s1 = (s0 + anchorY - paddingPx) * (z1 / z0) - anchorY + paddingPx;
+                const maxScrollTop = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight);
+                scrollEl.scrollTop = clamp(s1, 0, maxScrollTop);
+            }
+        }
         // ใช้ transform แทน css zoom: ลื่นกว่าและไม่ไปชนกับ layout/scroll บางเคส
         // IMPORTANT: ตั้ง origin เป็น top-center เพื่อให้ zoom เข้า/ออกแล้วยังคง "อยู่กลาง" ของหน้า
         // (origin ซ้ายบนจะทำให้ zoom เข้าแล้วดึงไปซ้าย / zoom ออกแล้วดึงไปขวา)
         el.style.transformOrigin = "50% 0";
         el.style.transform = `scale(${extra})`;
-    }, []);
+        lastEffectiveZoomRef.current = effectiveZoom;
+    }, [rootEl]);
 
     // IMPORTANT: when committing zoom (setZoom), we must avoid a 1-frame mismatch where
     // live transform scale is cleared before React finishes rendering the new `zoom`.
@@ -142,10 +162,13 @@ export function ScrollCanvas(props: {
     // - update committedZoomRef
     // - clear live transform *only after* the committed zoom matches the live zoom
     useLayoutEffect(() => {
+        const EPS = 1e-6;
+        if (Math.abs(lastEffectiveZoomRef.current - zoom) >= EPS) {
+            applyLiveZoom(zoom);
+        }
         committedZoomRef.current = zoom;
 
         const el = contentElRef.current;
-        const EPS = 1e-6;
 
         if (isZoomingRef.current) {
             // We're in a live-zoom session; clear the extra transform only once the
@@ -166,7 +189,7 @@ export function ScrollCanvas(props: {
             el.style.transform = "";
             el.style.transformOrigin = "";
         }
-    }, [zoom]);
+    }, [zoom, applyLiveZoom]);
 
     const scheduleCommitZoom = React.useCallback(() => {
         if (zoomCommitTimerRef.current != null) window.clearTimeout(zoomCommitTimerRef.current);
@@ -246,19 +269,10 @@ export function ScrollCanvas(props: {
                         );
                         if (next === prev) return;
 
-                        const rect = el.getBoundingClientRect();
-                        const clientY = zoomWheelClientYRef.current ?? (rect.top + rect.height / 2);
-                        const anchorY = clamp(clientY - rect.top, 0, rect.height);
-
-                        // Keep the document point under the cursor stable.
-                        const PAD = CANVAS_CONFIG.paddingPx; // (ถ้ามี outer padding อีก ก็ต้องรวมด้วย)
-                        const docY = (el.scrollTop + anchorY - PAD) / prev;
-                        el.scrollTop = docY * next - anchorY + PAD;
-
                         // Apply live zoom without forcing React to re-render.
                         isZoomingRef.current = true;
                         liveZoomRef.current = next;
-                        applyLiveZoom(next);
+                        applyLiveZoom(next, zoomWheelClientYRef.current ?? undefined);
                         scheduleCommitZoom();
                     });
                 }
@@ -345,10 +359,10 @@ export function ScrollCanvas(props: {
                     const level = getRenderLevel(dist, CANVAS_CONFIG.renderLevel.fullRadius, CANVAS_CONFIG.renderLevel.skeletonRadius);
 
                     const preset = document.pagePresetsById?.[p.presetId];
-                    const pageWPt = preset?.size?.width ?? 820;
-                    const pageHPt = preset?.size?.height ?? 1100;
-                    const pageWPx = ptToPx(pageWPt);
-                    const pageHPx = ptToPx(pageHPt);
+                    const pageWPt = preset?.size?.width ?? 82000;
+                    const pageHPt = preset?.size?.height ?? 110000;
+                    const pageWPx = pt100ToPx(pageWPt);
+                    const pageHPx = pt100ToPx(pageHPt);
 
                     return (
                         <React.Fragment key={p.id}>
@@ -404,8 +418,8 @@ export function ScrollCanvas(props: {
                         (() => {
                             const last = pages[pages.length - 1];
                             const preset = document.pagePresetsById?.[last.presetId];
-                            const pageWPt = preset?.size?.width ?? 820;
-                            const pageWPx = ptToPx(pageWPt);
+                            const pageWPt = preset?.size?.width ?? 82000;
+                            const pageWPx = pt100ToPx(pageWPt);
 
                             return (
                                 <GapSlot

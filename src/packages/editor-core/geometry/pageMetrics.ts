@@ -1,40 +1,40 @@
-import type { Margin } from "../schema";
+import type { Margin, Pt100 } from "../schema";
 
 export type PageRects = {
-    pageWPt: number;
-    pageHPt: number;
-    headerHPt: number;
-    footerHPt: number;
+    pageWPt: Pt100;
+    pageHPt: Pt100;
+    headerHPt: Pt100;
+    footerHPt: Pt100;
     margin: Margin;
     /** content area ตาม margin (อ้างอิงจาก page) */
-    contentRectPt: { x: number; y: number; w: number; h: number };
+    contentRectPt: { x: Pt100; y: Pt100; w: Pt100; h: Pt100 };
     /** rect ของ BODY content (ภายใน content area หลังตัด header/footer) ใน page-space */
-    bodyRectPt: { x: number; y: number; w: number; h: number };
+    bodyRectPt: { x: Pt100; y: Pt100; w: Pt100; h: Pt100 };
     /** rect ของ HEADER zone ใน page-space (ตำแหน่งวางจริง) */
-    headerRectPt: { x: number; y: number; w: number; h: number };
+    headerRectPt: { x: Pt100; y: Pt100; w: Pt100; h: Pt100 };
     /** rect ของ FOOTER zone ใน page-space (ตำแหน่งวางจริง) */
-    footerRectPt: { x: number; y: number; w: number; h: number };
+    footerRectPt: { x: Pt100; y: Pt100; w: Pt100; h: Pt100 };
     /** เส้นสำหรับ hit-test / guide ใน page-space */
     lines: {
-        marginLeftX: number;
-        marginRightX: number;
+        marginLeftX: Pt100;
+        marginRightX: Pt100;
         /** ขอบบนของ content area (marginTop) */
-        marginTopY: number;
+        marginTopY: Pt100;
         /** ขอบล่างของ content area (pageHPt - marginBottom) */
-        marginBottomY: number;
+        marginBottomY: Pt100;
         /** ขอบล่างของ header band (ภายใน content area) */
-        headerBottomY: number;
+        headerBottomY: Pt100;
         /** ขอบบนของ footer band (ภายใน content area) */
-        footerTopY: number;
+        footerTopY: Pt100;
     };
 };
 
 export function computePageRects(args: {
-    pageWPt: number;
-    pageHPt: number;
+    pageWPt: Pt100;
+    pageHPt: Pt100;
     margin: Margin;
-    headerHPt: number;
-    footerHPt: number;
+    headerHPt: Pt100;
+    footerHPt: Pt100;
     /** ถ้า true: วาง header เริ่มที่ marginTop, ถ้า false: วาง header ที่ y=0 */
     headerAnchorToMargins?: boolean;
     /** ถ้า true: วาง footer จบที่ pageHPt - marginBottom, ถ้า false: วาง footer จบที่ pageHPt */

@@ -6,7 +6,7 @@ import { NodeView } from "./NodeView";
 import * as Sel from "../../editor-core/schema/selectors";
 import { computePageRects } from "../../editor-core/geometry/pageMetrics";
 import * as Cmd from "../../editor-core/commands/docCommands";
-import { ptToPx } from "../utils/units";
+import { pt100ToPx } from "../utils/units";
 import { useEditorStore } from "../store/editorStore"; // ✅ เพิ่ม
 import { clientToPageDelta, clientToPagePoint } from "../utils/coords";
 
@@ -56,7 +56,7 @@ export function PageView({
     } = useEditorStore();
 
     const editingTarget = session.editingTarget ?? "page";
-    const HF_HIT = 6;
+    const HF_HIT = 600;
 
     const hfDragRef = useRef<null | {
         presetId: string;
@@ -101,8 +101,8 @@ export function PageView({
 
     const pageWPt = preset.size.width;
     const pageHPt = preset.size.height;
-    const pageWPx = ptToPx(pageWPt);
-    const pageHPx = ptToPx(pageHPt);
+    const pageWPx = pt100ToPx(pageWPt);
+    const pageHPx = pt100ToPx(pageHPt);
     const hfZone = useMemo(() => Sel.getHeaderFooterZone(document, preset.id), [document.headerFooterByPresetId, preset.id]);
 
     // ===== preview + dragging state =====
@@ -164,37 +164,37 @@ export function PageView({
     }, [pageWPt, pageHPt, margin, headerHPt, footerHPt, headerAnchorToMargins, footerAnchorToMargins]);
 
     const marginPx = {
-        top: ptToPx(margin.top),
-        right: ptToPx(margin.right),
-        bottom: ptToPx(margin.bottom),
-        left: ptToPx(margin.left),
+        top: pt100ToPx(margin.top),
+        right: pt100ToPx(margin.right),
+        bottom: pt100ToPx(margin.bottom),
+        left: pt100ToPx(margin.left),
     };
     const contentRectPx = {
-        x: ptToPx(pageRectsPt.contentRectPt.x),
-        y: ptToPx(pageRectsPt.contentRectPt.y),
-        w: ptToPx(pageRectsPt.contentRectPt.w),
-        h: ptToPx(pageRectsPt.contentRectPt.h),
+        x: pt100ToPx(pageRectsPt.contentRectPt.x),
+        y: pt100ToPx(pageRectsPt.contentRectPt.y),
+        w: pt100ToPx(pageRectsPt.contentRectPt.w),
+        h: pt100ToPx(pageRectsPt.contentRectPt.h),
     };
     const headerRectPx = {
-        x: ptToPx(pageRectsPt.headerRectPt.x),
-        y: ptToPx(pageRectsPt.headerRectPt.y),
-        w: ptToPx(pageRectsPt.headerRectPt.w),
-        h: ptToPx(pageRectsPt.headerRectPt.h),
+        x: pt100ToPx(pageRectsPt.headerRectPt.x),
+        y: pt100ToPx(pageRectsPt.headerRectPt.y),
+        w: pt100ToPx(pageRectsPt.headerRectPt.w),
+        h: pt100ToPx(pageRectsPt.headerRectPt.h),
     };
     const footerRectPx = {
-        x: ptToPx(pageRectsPt.footerRectPt.x),
-        y: ptToPx(pageRectsPt.footerRectPt.y),
-        w: ptToPx(pageRectsPt.footerRectPt.w),
-        h: ptToPx(pageRectsPt.footerRectPt.h),
+        x: pt100ToPx(pageRectsPt.footerRectPt.x),
+        y: pt100ToPx(pageRectsPt.footerRectPt.y),
+        w: pt100ToPx(pageRectsPt.footerRectPt.w),
+        h: pt100ToPx(pageRectsPt.footerRectPt.h),
     };
-    const headerHPx = ptToPx(headerHPt);
-    const footerHPx = ptToPx(footerHPt);
+    const headerHPx = pt100ToPx(headerHPt);
+    const footerHPx = pt100ToPx(footerHPt);
 
 
     // ===== drag math config =====
-    const HIT = 6; // ระยะจับใกล้เส้น (px ใน page space)
-    const MIN_CONTENT_W = 40;
-    const MIN_CONTENT_H = 40;
+    const HIT = 600; // ระยะจับใกล้เส้น (Pt100 ใน page space)
+    const MIN_CONTENT_W = 4000;
+    const MIN_CONTENT_H = 4000;
 
     // drag context (เก็บไว้ใน ref เพื่อไม่ rerender ทุก move)
     const dragRef = useRef<null | {
@@ -611,8 +611,8 @@ export function PageView({
 
     const headerLineY = headerHPt > 0 ? snapDocY(pageRectsPt.lines.headerBottomY) : null;
     const footerLineY = footerHPt > 0 ? snapDocY(pageRectsPt.lines.footerTopY) : null;
-    const headerLineYPx = headerLineY != null ? ptToPx(headerLineY) : null;
-    const footerLineYPx = footerLineY != null ? ptToPx(footerLineY) : null;
+    const headerLineYPx = headerLineY != null ? pt100ToPx(headerLineY) : null;
+    const footerLineYPx = footerLineY != null ? pt100ToPx(footerLineY) : null;
 
     const headerOrigin = { x: pageRectsPt.contentRectPt.x, y: pageRectsPt.headerRectPt.y };
     const bodyOrigin = { x: pageRectsPt.contentRectPt.x, y: pageRectsPt.bodyRectPt.y };
@@ -734,7 +734,7 @@ export function PageView({
                                 style={{
                                     position: "absolute",
                                     left: 0,
-                                    top: ptToPx(headerHPt + margin.top),
+                                    top: pt100ToPx(headerHPt + margin.top),
                                     width: pageWPx,
                                     height: hairline,
                                     ...lineStyle(
@@ -749,7 +749,7 @@ export function PageView({
                                 style={{
                                     position: "absolute",
                                     left: 0,
-                                    top: ptToPx(pageHPt - footerHPt - margin.bottom),
+                                    top: pt100ToPx(pageHPt - footerHPt - margin.bottom),
                                     width: pageWPx,
                                     height: hairline,
                                     ...lineStyle(highlightSide === "bottom", limitSide === "bottom"),
@@ -772,7 +772,7 @@ export function PageView({
                             <div
                                 style={{
                                     position: "absolute",
-                                    left: ptToPx(pageWPt - margin.right),
+                                    left: pt100ToPx(pageWPt - margin.right),
                                     top: 0,
                                     width: hairline,
                                     height: pageHPx,

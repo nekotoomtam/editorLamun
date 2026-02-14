@@ -2,7 +2,7 @@
 
 import React from "react";
 import type { DocumentJson, NodeJson, AssetImage } from "../../editor-core/schema";
-import { ptToPx } from "../utils/units";
+import { pt100ToPx } from "../utils/units";
 import { useEditorSessionStore } from "../store/editorStore";
 
 type ImageFit = "contain" | "cover" | "stretch";
@@ -20,7 +20,7 @@ export function NodeView({
 }: {
     node: NodeJson;
     doc: DocumentJson;
-    // node.x/y are PT in local space of the target zone; zoneOriginX/Y are the page-space PT origin of that zone.
+    // node.x/y are Pt100 in local space of the target zone; zoneOriginX/Y are the page-space Pt100 origin of that zone.
     zoneOriginX?: number;
     zoneOriginY?: number;
 }) {
@@ -36,10 +36,10 @@ export function NodeView({
 
     const base: React.CSSProperties = {
         position: "absolute",
-        left: ptToPx(leftPt),
-        top: ptToPx(topPt),
-        width: ptToPx(widthPt),
-        height: ptToPx(heightPt),
+        left: pt100ToPx(leftPt),
+        top: pt100ToPx(topPt),
+        width: pt100ToPx(widthPt),
+        height: pt100ToPx(heightPt),
         boxSizing: "border-box",
         userSelect: "none",
         pointerEvents: locked ? "none" : "auto",
@@ -69,7 +69,7 @@ export function NodeView({
                     ...outline,
                     background: node.style.fill ?? "transparent",
                     border: `1px solid ${node.style.stroke ?? "rgba(0,0,0,0.25)"}`,
-                    borderRadius: ptToPx(node.style.radius ?? 0),
+                    borderRadius: pt100ToPx(node.style.radius ?? 0),
                     opacity: (node as any).opacity ?? 1,
                 }}
                 onPointerDown={onPick}
@@ -88,8 +88,8 @@ export function NodeView({
                     padding: 2,
                     overflow: "hidden",
                     fontFamily: st.fontFamily,
-                    fontSize: ptToPx(st.fontSize ?? 0),
-                    lineHeight: `${ptToPx(st.lineHeight ?? 0)}px`,
+                    fontSize: pt100ToPx(st.fontSize ?? 0),
+                    lineHeight: `${pt100ToPx(st.lineHeight ?? 0)}px`,
                     color: st.color ?? "#111827",
                     fontWeight: st.bold ? 700 : 400,
                     fontStyle: st.italic ? "italic" : "normal",

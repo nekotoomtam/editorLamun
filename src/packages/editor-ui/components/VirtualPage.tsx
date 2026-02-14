@@ -3,6 +3,7 @@
 import React from "react";
 import type { DocumentJson, PageJson } from "../../editor-core/schema";
 import { PageView } from "./PageView";
+import { pt100ToPx } from "../utils/units";
 
 function SkeletonGhostLayer({
     document,
@@ -43,18 +44,18 @@ function SkeletonGhostLayer({
                 // clamp กันหลุดหน้า
                 const cx = Math.max(0, x);
                 const cy = Math.max(0, y);
-                const cw = Math.max(6, Math.min(w, pageW - cx));
-                const ch = Math.max(6, Math.min(h, pageH - cy));
+                const cw = Math.max(600, Math.min(w, pageW - cx));
+                const ch = Math.max(600, Math.min(h, pageH - cy));
 
                 return (
                     <div
                         key={id}
                         style={{
                             position: "absolute",
-                            left: x,
-                            top: y,
-                            width: cw,
-                            height: ch,
+                            left: pt100ToPx(x),
+                            top: pt100ToPx(y),
+                            width: pt100ToPx(cw),
+                            height: pt100ToPx(ch),
                             borderRadius: 4,
                             border: "1px solid rgba(0,0,0,0.10)",
                             background: "rgba(0,0,0,0.03)",
@@ -93,12 +94,14 @@ export function VirtualPage(props: {
     const { document, page, showMargin, active, level, onActivate, loading } = props;
 
     const preset = document.pagePresetsById?.[page.presetId] ?? null;
-    const pageH = preset?.size?.height ?? 1100;
-    const pageW = preset?.size?.width ?? 820;
+    const pageH = preset?.size?.height ?? 110000;
+    const pageW = preset?.size?.width ?? 82000;
+    const pageHPx = pt100ToPx(pageH);
+    const pageWPx = pt100ToPx(pageW);
 
     // ✅ none = placeholder กินพื้นที่เท่าหน้าจริง
     if (level === "none") {
-        return <div data-page-id={page.id} style={{ width: pageW, height: pageH }} />;
+        return <div data-page-id={page.id} style={{ width: pageWPx, height: pageHPx }} />;
     }
 
     // ✅ skeleton = โครงหน้า (ตอนนี้ทำเป็นกรอบง่าย ๆ ไปก่อน)

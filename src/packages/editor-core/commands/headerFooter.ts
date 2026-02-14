@@ -1,4 +1,4 @@
-import type { DocumentJson, Id } from "../schema";
+import type { DocumentJson, Id, Pt100 } from "../schema";
 
 export type HeaderFooterConstraints = {
     /** header สูงสุดเป็น % ของ pageH */
@@ -6,15 +6,15 @@ export type HeaderFooterConstraints = {
     /** footer สูงสุดเป็น % ของ pageH */
     maxFooterPct: number;
     /** ต้องเหลือ body (ภายใน content area = หลังหัก margin บน/ล่าง) อย่างน้อยเท่าไหร่ */
-    minBodyPt: number;
-    minHeaderPt: number;
-    minFooterPt: number;
+    minBodyPt: Pt100;
+    minHeaderPt: Pt100;
+    minFooterPt: Pt100;
 };
 
 export const DEFAULT_HF_CONSTRAINTS: HeaderFooterConstraints = {
     maxHeaderPct: 0.25,
     maxFooterPct: 0.20,
-    minBodyPt: 120,
+    minBodyPt: 12000,
     minHeaderPt: 0,
     minFooterPt: 0,
 };
@@ -90,14 +90,14 @@ export function ensureHeaderFooter(doc: DocumentJson, presetId: Id) {
                 name: "Header",
                 // Default: match current UI expectations.
                 // If you need legacy behavior (0 height), migrate at load time.
-                heightPt: 100,
+                heightPt: 10000,
                 anchorToMargins: true,
                 nodeOrder: [],
             },
             footer: {
                 id: `hf-${presetId}-footer`,
                 name: "Footer",
-                heightPt: 80,
+                heightPt: 8000,
                 anchorToMargins: true,
                 nodeOrder: [],
             },

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import type { DocumentJson, Id, PagePreset } from "../editor-core/schema";
+import { pt100ToPt, ptToPt100, type DocumentJson, type Id, type PagePreset } from "../editor-core/schema";
 import { getOrientation } from "../editor-core/schema";
 import { useEditorStore } from "./store/editorStore";
 import CollapsibleSection from "./CollapsibleSection";
@@ -189,7 +189,7 @@ export function Inspector({
 
     // ✅ NEW: change margin route ตาม source
     const onChangeMargin = (side: "top" | "right" | "bottom" | "left", raw: number) => {
-        const v = clampInt(raw, 0, 500);
+        const v = ptToPt100(clampInt(raw, 0, 500));
 
         if (marginSource === "preset") {
             if (isLocked) return;
@@ -351,13 +351,13 @@ export function Inspector({
 
                     const setHeaderEnabled = (on: boolean) => {
                         // เปิด = default 100, ปิด = 0
-                        updateRepeatAreaHeightPt(preset.id, "header", on ? (headerPt || 100) : 0);
+                        updateRepeatAreaHeightPt(preset.id, "header", on ? (headerPt || 10000) : 0);
                         // ถ้าปิด preset ก็เคลียร์ hide ของ page ให้กลับมาเป็น false จะได้ไม่งง
                         if (!on) setPageHeaderFooterHidden(page.id, { headerHidden: false });
                     };
 
                     const setFooterEnabled = (on: boolean) => {
-                        updateRepeatAreaHeightPt(preset.id, "footer", on ? (footerPt || 80) : 0);
+                        updateRepeatAreaHeightPt(preset.id, "footer", on ? (footerPt || 8000) : 0);
                         if (!on) setPageHeaderFooterHidden(page.id, { footerHidden: false });
                     };
 
@@ -379,9 +379,9 @@ export function Inspector({
                                     <FieldRow label="Height">
                                         <input
                                             type="number"
-                                            value={headerPt}
+                                            value={pt100ToPt(headerPt)}
                                             min={0}
-                                            onChange={(e) => updateRepeatAreaHeightPt(preset.id, "header", clampInt(Number(e.target.value), 0, 600))}
+                                            onChange={(e) => updateRepeatAreaHeightPt(preset.id, "header", ptToPt100(clampInt(Number(e.target.value), 0, 600)))}
                                             style={{
                                                 width: "100%",
                                                 padding: "6px 8px",
@@ -433,9 +433,9 @@ export function Inspector({
                                     <FieldRow label="Height">
                                         <input
                                             type="number"
-                                            value={footerPt}
+                                            value={pt100ToPt(footerPt)}
                                             min={0}
-                                            onChange={(e) => updateRepeatAreaHeightPt(preset.id, "footer", clampInt(Number(e.target.value), 0, 600))}
+                                            onChange={(e) => updateRepeatAreaHeightPt(preset.id, "footer", ptToPt100(clampInt(Number(e.target.value), 0, 600)))}
                                             style={{
                                                 width: "100%",
                                                 padding: "6px 8px",
@@ -528,7 +528,7 @@ export function Inspector({
                     <input
                         type="number"
                         disabled={marginSource === "preset" ? isLocked : false}
-                        value={effectiveMargin?.top ?? preset.margin.top}
+                        value={pt100ToPt(effectiveMargin?.top ?? preset.margin.top)}
                         onChange={(e) => onChangeMargin("top", Number(e.target.value))}
                         style={{
                             width: "100%",
@@ -543,7 +543,7 @@ export function Inspector({
                     <input
                         type="number"
                         disabled={marginSource === "preset" ? isLocked : false}
-                        value={effectiveMargin?.right ?? preset.margin.right}
+                        value={pt100ToPt(effectiveMargin?.right ?? preset.margin.right)}
                         onChange={(e) => onChangeMargin("right", Number(e.target.value))}
                         style={{
                             width: "100%",
@@ -558,7 +558,7 @@ export function Inspector({
                     <input
                         type="number"
                         disabled={marginSource === "preset" ? isLocked : false}
-                        value={effectiveMargin?.bottom ?? preset.margin.bottom}
+                        value={pt100ToPt(effectiveMargin?.bottom ?? preset.margin.bottom)}
                         onChange={(e) => onChangeMargin("bottom", Number(e.target.value))}
                         style={{
                             width: "100%",
@@ -573,7 +573,7 @@ export function Inspector({
                     <input
                         type="number"
                         disabled={marginSource === "preset" ? isLocked : false}
-                        value={effectiveMargin?.left ?? preset.margin.left}
+                        value={pt100ToPt(effectiveMargin?.left ?? preset.margin.left)}
                         onChange={(e) => onChangeMargin("left", Number(e.target.value))}
                         style={{
                             width: "100%",
