@@ -151,7 +151,7 @@ export function PageView({
 
 
     // rects/page-lines ใช้ single source of truth (รองรับ preview margin/header/footer)
-    const rects = useMemo(() => {
+    const pageRectsPt = useMemo(() => {
         return computePageRects({
             pageWPt,
             pageHPt,
@@ -163,36 +163,29 @@ export function PageView({
         });
     }, [pageWPt, pageHPt, margin, headerHPt, footerHPt, headerAnchorToMargins, footerAnchorToMargins]);
 
-    const bodyRectPt = rects.bodyRect;
     const marginPx = {
         top: ptToPx(margin.top),
         right: ptToPx(margin.right),
         bottom: ptToPx(margin.bottom),
         left: ptToPx(margin.left),
     };
-    const bodyRectPx = {
-        x: ptToPx(bodyRectPt.x),
-        y: ptToPx(bodyRectPt.y),
-        w: ptToPx(bodyRectPt.w),
-        h: ptToPx(bodyRectPt.h),
-    };
     const contentRectPx = {
-        x: ptToPx(rects.contentRect.x),
-        y: ptToPx(rects.contentRect.y),
-        w: ptToPx(rects.contentRect.w),
-        h: ptToPx(rects.contentRect.h),
+        x: ptToPx(pageRectsPt.contentRectPt.x),
+        y: ptToPx(pageRectsPt.contentRectPt.y),
+        w: ptToPx(pageRectsPt.contentRectPt.w),
+        h: ptToPx(pageRectsPt.contentRectPt.h),
     };
     const headerRectPx = {
-        x: ptToPx(rects.headerRect.x),
-        y: ptToPx(rects.headerRect.y),
-        w: ptToPx(rects.headerRect.w),
-        h: ptToPx(rects.headerRect.h),
+        x: ptToPx(pageRectsPt.headerRectPt.x),
+        y: ptToPx(pageRectsPt.headerRectPt.y),
+        w: ptToPx(pageRectsPt.headerRectPt.w),
+        h: ptToPx(pageRectsPt.headerRectPt.h),
     };
     const footerRectPx = {
-        x: ptToPx(rects.footerRect.x),
-        y: ptToPx(rects.footerRect.y),
-        w: ptToPx(rects.footerRect.w),
-        h: ptToPx(rects.footerRect.h),
+        x: ptToPx(pageRectsPt.footerRectPt.x),
+        y: ptToPx(pageRectsPt.footerRectPt.y),
+        w: ptToPx(pageRectsPt.footerRectPt.w),
+        h: ptToPx(pageRectsPt.footerRectPt.h),
     };
     const headerHPx = ptToPx(headerHPt);
     const footerHPx = ptToPx(footerHPt);
@@ -209,7 +202,7 @@ export function PageView({
         presetId: string;
         source: "preset" | "page";
         side: Side;
-        startPagePt: { px: number; py: number };
+        startPagePt: { xPt: number; yPt: number };
         startMargin: PagePreset["margin"];
         pageWPt: number;
         pageHPt: number;
@@ -249,7 +242,7 @@ export function PageView({
 
     // NOTE: client->page conversion is centralized in editor-ui/utils/coords.ts
 
-    function hitTestSide(px: number, py: number, lines: { marginLeftX: number; marginRightX: number; marginTopY: number; marginBottomY: number }): Side | null {
+    function hitTestSide(xPt: number, yPt: number, lines: { marginLeftX: number; marginRightX: number; marginTopY: number; marginBottomY: number }): Side | null {
 
         const xL = lines.marginLeftX;
         const xR = lines.marginRightX;
@@ -258,10 +251,10 @@ export function PageView({
 
         // ใกล้เส้นไหน + อยู่ในช่วงระนาบนั้น
         // (เราให้จับได้ทั้งแนวของเส้น ไม่ต้องอยู่แค่ใน content)
-        if (Math.abs(py - yT) <= HIT) return "top";
-        if (Math.abs(py - yB) <= HIT) return "bottom";
-        if (Math.abs(px - xL) <= HIT) return "left";
-        if (Math.abs(px - xR) <= HIT) return "right";
+        if (Math.abs(yPt - yT) <= HIT) return "top";
+        if (Math.abs(yPt - yB) <= HIT) return "bottom";
+        if (Math.abs(xPt - xL) <= HIT) return "left";
+        if (Math.abs(xPt - xR) <= HIT) return "right";
 
         return null;
     }
@@ -360,9 +353,9 @@ export function PageView({
         const pw = pageWPtRef.current;
         const ph = pageHPtRef.current;
 
-        const { px: xPt, py: yPt } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
-        const nearHeaderBottom = headerHPt > 0 && Math.abs(yPt - rects.lines.headerBottomY) <= HF_HIT;
-        const nearFooterTop = footerHPt > 0 && Math.abs(yPt - rects.lines.footerTopY) <= HF_HIT;
+        const { xPt, yPt } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
+        const nearHeaderBottom = headerHPt > 0 && Math.abs(yPt - pageRectsPt.lines.headerBottomY) <= HF_HIT;
+        const nearFooterTop = footerHPt > 0 && Math.abs(yPt - pageRectsPt.lines.footerTopY) <= HF_HIT;
 
         if (nearHeaderBottom || nearFooterTop) {
             setHoverSide(null); // ไม่ให้ไปชนกับ drag margin
@@ -372,7 +365,7 @@ export function PageView({
             (wrapRef.current as any).style.cursor = "default";
         }
 
-        const side = hitTestSide(xPt, yPt, rects.lines);
+        const side = hitTestSide(xPt, yPt, pageRectsPt.lines);
 
         // ถ้า preset locked และ source=preset => hover ได้แต่จะลากไม่ได้ (เพื่อให้รู้ว่ามีเส้น)
         setHoverSide(side);
@@ -396,10 +389,10 @@ export function PageView({
         const pw = pageWPtRef.current;
         const ph = pageHPtRef.current;
 
-        const { py: yPt } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
+        const { yPt } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
 
-        const nearHeaderBottom = headerHPt > 0 && Math.abs(yPt - rects.lines.headerBottomY) <= HF_HIT;
-        const nearFooterTop = footerHPt > 0 && Math.abs(yPt - rects.lines.footerTopY) <= HF_HIT;
+        const nearHeaderBottom = headerHPt > 0 && Math.abs(yPt - pageRectsPt.lines.headerBottomY) <= HF_HIT;
+        const nearFooterTop = footerHPt > 0 && Math.abs(yPt - pageRectsPt.lines.footerTopY) <= HF_HIT;
 
         // ✅ 1) handle header/footer resize ก่อน
 
@@ -409,7 +402,7 @@ export function PageView({
             hfDragRef.current = {
                 presetId: preset.id,
                 kind: nearHeaderBottom ? "header" : "footer",
-                startPageY: pt.py,
+                startPageY: pt.yPt,
                 startHeaderH: headerHPt,
                 startFooterH: footerHPt,
                 pageHPt,
@@ -436,7 +429,7 @@ export function PageView({
             side: hoverSide,
             startPagePt: (() => {
                 const pt = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
-                return { px: pt.px, py: pt.py };
+                return { xPt: pt.xPt, yPt: pt.yPt };
             })(),
             startMargin: baseMargin,
             pageWPt: preset.size.width,
@@ -453,6 +446,7 @@ export function PageView({
         console.log("pageH pt:", pageHPt);
         console.log("pageW px:", pageWPx);
         console.log("pageH px:", pageHPx);
+        console.log("contentRectPx:", contentRectPx);
     }, []);
 
     useEffect(() => {
@@ -467,7 +461,7 @@ export function PageView({
                 const ph = pageHPtRef.current;
 
                 const cur = clientToPagePoint(el, ev.clientX, ev.clientY, pw, ph);
-                const dy = cur.py - ctxHF.startPageY;
+                const dy = cur.yPt - ctxHF.startPageY;
 
                 if (ctxHF.kind === "header") {
                     const raw = ctxHF.startHeaderH + dy;
@@ -512,7 +506,7 @@ export function PageView({
                 const ph = pageHPtRef.current;
 
                 const cur = clientToPagePoint(el, ev.clientX, ev.clientY, pw, ph);
-                const dy = cur.py - ctxHF.startPageY;
+                const dy = cur.yPt - ctxHF.startPageY;
 
                 const fns = storeFnsRef.current;
 
@@ -615,14 +609,14 @@ export function PageView({
         return Math.round(yDoc * z) / z;
     };
 
-    const headerLineY = headerHPt > 0 ? snapDocY(rects.lines.headerBottomY) : null;
-    const footerLineY = footerHPt > 0 ? snapDocY(rects.lines.footerTopY) : null;
+    const headerLineY = headerHPt > 0 ? snapDocY(pageRectsPt.lines.headerBottomY) : null;
+    const footerLineY = footerHPt > 0 ? snapDocY(pageRectsPt.lines.footerTopY) : null;
     const headerLineYPx = headerLineY != null ? ptToPx(headerLineY) : null;
     const footerLineYPx = footerLineY != null ? ptToPx(footerLineY) : null;
 
-    const headerOrigin = { x: rects.contentRect.x, y: rects.headerRect.y };
-    const bodyOrigin = { x: rects.contentRect.x, y: rects.bodyRect.y };
-    const footerOrigin = { x: rects.contentRect.x, y: rects.footerRect.y };
+    const headerOrigin = { x: pageRectsPt.contentRectPt.x, y: pageRectsPt.headerRectPt.y };
+    const bodyOrigin = { x: pageRectsPt.contentRectPt.x, y: pageRectsPt.bodyRectPt.y };
+    const footerOrigin = { x: pageRectsPt.contentRectPt.x, y: pageRectsPt.footerRectPt.y };
 
 
     return (
@@ -659,13 +653,13 @@ export function PageView({
                 if (!el) return;
                 const pw = pageWPtRef.current;
                 const ph = pageHPtRef.current;
-                const { py: yPt } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
+                const { yPt } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
 
-                if (headerHPt > 0 && yPt >= rects.headerRect.y && yPt <= (rects.headerRect.y + headerHPt)) {
+                if (headerHPt > 0 && yPt >= pageRectsPt.headerRectPt.y && yPt <= (pageRectsPt.headerRectPt.y + headerHPt)) {
                     setEditingTarget("header");
                     return;
                 }
-                if (footerHPt > 0 && yPt >= rects.footerRect.y && yPt <= (rects.footerRect.y + footerHPt)) {
+                if (footerHPt > 0 && yPt >= pageRectsPt.footerRectPt.y && yPt <= (pageRectsPt.footerRectPt.y + footerHPt)) {
                     setEditingTarget("footer");
                     return;
                 }
@@ -679,10 +673,10 @@ export function PageView({
                 if (!el) return;
                 const pw = pageWPtRef.current;
                 const ph = pageHPtRef.current;
-                const { py: yPt } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
+                const { yPt } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
 
-                const inHeader = headerHPt > 0 && yPt >= rects.headerRect.y && yPt <= (rects.headerRect.y + headerHPt);
-                const inFooter = footerHPt > 0 && yPt >= rects.footerRect.y && yPt <= (rects.footerRect.y + footerHPt);
+                const inHeader = headerHPt > 0 && yPt >= pageRectsPt.headerRectPt.y && yPt <= (pageRectsPt.headerRectPt.y + headerHPt);
+                const inFooter = footerHPt > 0 && yPt >= pageRectsPt.footerRectPt.y && yPt <= (pageRectsPt.footerRectPt.y + footerHPt);
 
                 if (editingTarget === "header" && !inHeader) setEditingTarget("page");
                 if (editingTarget === "footer" && !inFooter) setEditingTarget("page");
@@ -722,10 +716,10 @@ export function PageView({
                     <div
                         style={{
                             position: "absolute",
-                            left: bodyRectPx.x,
-                            top: bodyRectPx.y,
-                            width: bodyRectPx.w,
-                            height: bodyRectPx.h,
+                            left: contentRectPx.x,
+                            top: contentRectPx.y,
+                            width: contentRectPx.w,
+                            height: contentRectPx.h,
                             border: `${hairline} dashed #9ca3af`,
                             pointerEvents: "none",
                         }}

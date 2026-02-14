@@ -29,7 +29,7 @@ export function getEffectiveMargin(doc: DocumentJson, pageId: Id) {
 export function getContentRect(doc: DocumentJson, pageId: Id) {
     const m = getEffectivePageMetrics(doc, pageId);
     if (!m) return null;
-    const { x, y, w, h } = m.contentRect;
+    const { x, y, w, h } = m.contentRectPt;
     return { x, y, w, h };
 }
 
@@ -86,7 +86,7 @@ export function getEffectiveHeaderFooterHeights(doc: DocumentJson, pageId: Id): 
 export function getBodyContentRect(doc: DocumentJson, pageId: Id) {
     const m = getEffectivePageMetrics(doc, pageId);
     if (!m) return null;
-    const { x, y, w, h } = m.bodyRect;
+    const { x, y, w, h } = m.bodyRectPt;
     return { x, y, w, h, headerH: m.headerH, footerH: m.footerH, pageW: m.pageWPt, pageH: m.pageHPt };
 }
 
@@ -126,10 +126,10 @@ export function getEffectivePageMetrics(doc: DocumentJson, pageId: Id) {
         footerAnchorToMargins,
         pageWPt,
         pageHPt,
-        contentRect: rects.contentRect,
-        bodyRect: rects.bodyRect,
-        headerRect: rects.headerRect,
-        footerRect: rects.footerRect,
+        contentRectPt: rects.contentRectPt,
+        bodyRectPt: rects.bodyRectPt,
+        headerRectPt: rects.headerRectPt,
+        footerRectPt: rects.footerRectPt,
         lines: rects.lines,
     };
 }

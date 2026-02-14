@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { DocumentJson, PageJson } from "../../../editor-core/schema";
+import { ptToPx } from "../../utils/units";
 
 export type PageMetrics = {
     offsets: number[];
@@ -22,9 +23,10 @@ export function usePageMetrics(opts: {
         let acc = 0;
         for (let i = 0; i < pages.length; i++) {
             const pg = pages[i];
-            const h = presetById[pg.presetId]?.size?.height ?? 1100;
+            const hPt = presetById[pg.presetId]?.size?.height ?? 1100;
+            const hPx = ptToPx(hPt);
 
-            const hz = h;
+            const hz = hPx;
             offsets.push(acc);
             heights.push(hz);
 

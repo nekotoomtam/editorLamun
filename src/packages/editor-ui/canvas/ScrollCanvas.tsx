@@ -14,6 +14,7 @@ import { useVirtualWindow } from "./hooks/useVirtualWindow";
 import { getRenderLevel } from "./utils";
 import type { CanvasNavigatorHandle } from "../CanvasView";
 import { CANVAS_CONFIG } from "./canvasConfig";
+import { ptToPx } from "../utils/units";
 
 function clamp(n: number, min: number, max: number) {
     return Math.max(min, Math.min(max, n));
@@ -344,15 +345,17 @@ export function ScrollCanvas(props: {
                     const level = getRenderLevel(dist, CANVAS_CONFIG.renderLevel.fullRadius, CANVAS_CONFIG.renderLevel.skeletonRadius);
 
                     const preset = document.pagePresetsById?.[p.presetId];
-                    const pageW = preset?.size?.width ?? 820;
-                    const pageH = preset?.size?.height ?? 1100;
+                    const pageWPt = preset?.size?.width ?? 820;
+                    const pageHPt = preset?.size?.height ?? 1100;
+                    const pageWPx = ptToPx(pageWPt);
+                    const pageHPx = ptToPx(pageHPt);
 
                     return (
                         <React.Fragment key={p.id}>
                             <PageSlot
                                 id={p.id}
-                                width={pageW}
-                                height={pageH}
+                                widthPx={pageWPx}
+                                heightPx={pageHPx}
                                 zoom={zoom}
                                 registerRef={registerPageRef}
                             >
@@ -377,7 +380,7 @@ export function ScrollCanvas(props: {
                             {idx < pages.length - 1 && idx + 1 < endIdx && (
                                 shouldRenderGap(idx) ? (
                                     <GapSlot
-                                        width={pageW}
+                                        width={pageWPx}
                                         gapPx={pageMetrics.gapPx}
                                         zoom={zoom}
                                         scrollRoot={rootEl}
@@ -401,11 +404,12 @@ export function ScrollCanvas(props: {
                         (() => {
                             const last = pages[pages.length - 1];
                             const preset = document.pagePresetsById?.[last.presetId];
-                            const pageW = preset?.size?.width ?? 820;
+                            const pageWPt = preset?.size?.width ?? 820;
+                            const pageWPx = ptToPx(pageWPt);
 
                             return (
                                 <GapSlot
-                                    width={pageW}
+                                    width={pageWPx}
                                     gapPx={pageMetrics.gapPx}
                                     zoom={zoom}
                                     scrollRoot={rootEl}

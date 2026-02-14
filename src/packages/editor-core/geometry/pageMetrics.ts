@@ -7,13 +7,13 @@ export type PageRects = {
     footerHPt: number;
     margin: Margin;
     /** content area ตาม margin (อ้างอิงจาก page) */
-    contentRect: { x: number; y: number; w: number; h: number };
+    contentRectPt: { x: number; y: number; w: number; h: number };
     /** rect ของ BODY content (ภายใน content area หลังตัด header/footer) ใน page-space */
-    bodyRect: { x: number; y: number; w: number; h: number };
+    bodyRectPt: { x: number; y: number; w: number; h: number };
     /** rect ของ HEADER zone ใน page-space (ตำแหน่งวางจริง) */
-    headerRect: { x: number; y: number; w: number; h: number };
+    headerRectPt: { x: number; y: number; w: number; h: number };
     /** rect ของ FOOTER zone ใน page-space (ตำแหน่งวางจริง) */
-    footerRect: { x: number; y: number; w: number; h: number };
+    footerRectPt: { x: number; y: number; w: number; h: number };
     /** เส้นสำหรับ hit-test / guide ใน page-space */
     lines: {
         marginLeftX: number;
@@ -55,14 +55,14 @@ export function computePageRects(args: {
     const headerBandBottom = Math.min(contentBottom, contentTop + Math.max(0, headerHPt));
     const footerBandTop = Math.max(contentTop, contentBottom - Math.max(0, footerHPt));
 
-    const contentRect = { x: contentLeft, y: contentTop, w: contentW, h: contentH };
-    const bodyRect = { x: contentLeft, y: headerBandBottom, w: contentW, h: Math.max(0, footerBandTop - headerBandBottom) };
+    const contentRectPt = { x: contentLeft, y: contentTop, w: contentW, h: contentH };
+    const bodyRectPt = { x: contentLeft, y: headerBandBottom, w: contentW, h: Math.max(0, footerBandTop - headerBandBottom) };
 
     // Placement rects for header/footer zones (anchor affects only Y position).
     const headerY = headerAnchor ? contentTop : 0;
     const footerY = footerAnchor ? (contentBottom - Math.max(0, footerHPt)) : (pageHPt - Math.max(0, footerHPt));
-    const headerRect = { x: 0, y: headerY, w: pageWPt, h: Math.max(0, headerHPt) };
-    const footerRect = { x: 0, y: footerY, w: pageWPt, h: Math.max(0, footerHPt) };
+    const headerRectPt = { x: 0, y: headerY, w: pageWPt, h: Math.max(0, headerHPt) };
+    const footerRectPt = { x: 0, y: footerY, w: pageWPt, h: Math.max(0, footerHPt) };
 
     return {
         pageWPt,
@@ -70,10 +70,10 @@ export function computePageRects(args: {
         headerHPt,
         footerHPt,
         margin,
-        contentRect,
-        bodyRect,
-        headerRect,
-        footerRect,
+        contentRectPt,
+        bodyRectPt,
+        headerRectPt,
+        footerRectPt,
         lines: {
             marginLeftX: contentLeft,
             marginRightX: contentRight,

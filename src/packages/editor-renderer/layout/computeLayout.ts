@@ -56,16 +56,16 @@ export function computeLayout(document: DocumentJson): DocumentLayout {
                 target: "page",
                 nodeOrder: pageTarget.nodeOrder,
                 nodesById: pageTarget.nodesById,
-                offsetX: m.contentRect?.x ?? 0,
-                offsetY: m.bodyRect?.y ?? 0,
+                offsetX: m.contentRectPt?.x ?? 0,
+                offsetY: m.bodyRectPt?.y ?? 0,
             }),
             ...(m.headerH > 0
                 ? toLayoutNodes({
                     target: "header",
                     nodeOrder: headerTarget.nodeOrder,
                     nodesById: headerTarget.nodesById,
-                    offsetX: m.contentRect?.x ?? 0,
-                    offsetY: m.headerRect?.y ?? 0,
+                    offsetX: m.contentRectPt?.x ?? 0,
+                    offsetY: m.headerRectPt?.y ?? 0,
                 })
                 : []),
             ...(m.footerH > 0
@@ -73,8 +73,8 @@ export function computeLayout(document: DocumentJson): DocumentLayout {
                     target: "footer",
                     nodeOrder: footerTarget.nodeOrder,
                     nodesById: footerTarget.nodesById,
-                    offsetX: m.contentRect?.x ?? 0,
-                    offsetY: m.footerRect?.y ?? (m.pageHPt - m.footerH),
+                    offsetX: m.contentRectPt?.x ?? 0,
+                    offsetY: m.footerRectPt?.y ?? (m.pageHPt - m.footerH),
                 })
                 : []),
         ];
@@ -83,7 +83,7 @@ export function computeLayout(document: DocumentJson): DocumentLayout {
             page,
             pageWidth: m.pageWPt,
             pageHeight: m.pageHPt,
-            bodyRect: m.bodyRect,
+            bodyRect: m.bodyRectPt,
             headerH: m.headerH,
             footerH: m.footerH,
             nodes,

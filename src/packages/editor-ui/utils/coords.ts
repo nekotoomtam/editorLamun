@@ -6,9 +6,9 @@
 
 export type PageSpacePoint = {
     /** page-space X (PT) */
-    px: number;
+    xPt: number;
     /** page-space Y (PT) */
-    py: number;
+    yPt: number;
     /** effective scaleX (client px per page PT) */
     scaleX: number;
     /** effective scaleY (client px per page PT) */
@@ -39,12 +39,12 @@ export function clientToPagePoint(
     const yPt = (clientY - rect.top) / scaleY;
     const clampedX = Math.max(0, Math.min(pageWPt, xPt));
     const clampedY = Math.max(0, Math.min(pageHPt, yPt));
-    return { px: clampedX, py: clampedY, scaleX, scaleY, rect };
+    return { xPt: clampedX, yPt: clampedY, scaleX, scaleY, rect };
 }
 
 export function clientToPageDelta(
-    start: { px: number; py: number },
-    current: { px: number; py: number }
+    start: { xPt: number; yPt: number },
+    current: { xPt: number; yPt: number }
 ) {
-    return { dx: current.px - start.px, dy: current.py - start.py };
+    return { dx: current.xPt - start.xPt, dy: current.yPt - start.yPt };
 }
