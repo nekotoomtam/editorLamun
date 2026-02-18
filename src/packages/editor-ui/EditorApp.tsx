@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useEditorStore, useEditorSessionStore } from "./store/editorStore";
 import { CanvasView } from "./CanvasView";
-import { Inspector } from "./Inspector";
+import { RightSidebar } from "./RightSidebar";
 import type { PageJson } from "../editor-core/schema";
 import { PagesPanel } from "./PagesPanel";
 import type { CanvasNavigatorHandle } from "./CanvasView";
@@ -226,20 +226,6 @@ export function EditorApp() {
         setAddPresetOpen(true);
     };
 
-    // ✅ helper: open edit
-    const openEditPreset = (id: Id) => {
-        setPresetMode("edit");
-        setPresetId(id);
-        setAddPresetOpen(true);
-    };
-
-    // ✅ helper: open delete (มาจาก edit แล้วกด delete)
-    const openDeletePreset = (id: Id) => {
-        setPresetMode("delete");
-        setPresetId(id);
-        setAddPresetOpen(true);
-    };
-
     const totalPages = doc.pageOrder.length;
     const currentPageNum = useMemo(() => {
         if (totalPages === 0) return null;
@@ -421,20 +407,13 @@ export function EditorApp() {
                     flexDirection: "column",
                 }}
             >
-                <div style={{ flex: 1, overflow: "auto" }}>
-                    <Inspector
-                        doc={doc}
-                        activePageId={activePageId}
-                        onOpenAddPreset={() => {
-                            if (doc.pageOrder.length === 0) return;
-                            openCreatePreset();
-                        }}
-                        onOpenEditPreset={(pid) => {
-                            openEditPreset(pid);
-                        }}
-                    />
-
-                </div>
+                <RightSidebar
+                    doc={doc}
+                    onOpenAddPreset={() => {
+                        if (doc.pageOrder.length === 0) return;
+                        openCreatePreset();
+                    }}
+                />
             </div>
 
             {/* Right resizer */}

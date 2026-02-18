@@ -473,26 +473,6 @@ export function Inspector({
                 })()}
             </CollapsibleSection >
 
-            <FieldRow label="Status">
-                {isLocked ? (
-                    <div
-                        style={{
-                            display: "inline-block",
-                            padding: "2px 8px",
-                            borderRadius: 999,
-                            fontSize: 12,
-                            background: "#fee2e2",
-                            color: "#991b1b",
-                            fontWeight: 700,
-                        }}
-                    >
-                        Locked
-                    </div>
-                ) : (
-                    <div style={{ color: "#6b7280" }}>Editable</div>
-                )}
-            </FieldRow>
-
             <CollapsibleSection open={open.margins} onToggle={() => toggle("margins")} title="Margins">
                 {/* ✅ NEW: source selector */}
                 <FieldRow label="Applies to">

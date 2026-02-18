@@ -381,11 +381,8 @@ export function ScrollCanvas(props: {
                                     level={level}
                                     onActivate={() => {
                                         if (p.id === activePageId) return;
-                                        nav.navigateToPage(p.id, {
-                                            source: "canvas",
-                                            behavior: "auto",
-                                            smoothDistancePages: CANVAS_CONFIG.navigation.smoothDistancePages,
-                                        });
+                                        // Click-select page without triggering programmatic scroll.
+                                        setActivePageId(p.id);
                                     }}
                                     loading={nodesMock.isLoading(p.id) && p.id === pages[anchorIndex]?.id}
                                 />
