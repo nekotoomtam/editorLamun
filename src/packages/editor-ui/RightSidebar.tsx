@@ -142,7 +142,7 @@ export function RightSidebar({
     doc: DocumentJson;
     onOpenAddPreset?: () => void;
 }) {
-    const { session } = useEditorSessionStore();
+    const { session, setTool } = useEditorSessionStore();
     const { updatePresetMargin, setPageMarginSource, updatePageMargin, updateRepeatAreaHeightPt } = useEditorStore();
     const activePageId = session.activePageId ?? null;
     const selectedIds = session.selectedNodeIds ?? EMPTY_IDS;
@@ -214,21 +214,36 @@ export function RightSidebar({
 
     useEffect(() => {
         if (!page || !preset || !effectiveMargin) return;
+
         const next: MarginPt = {
             top: pt100ToPt(effectiveMargin.top),
             right: pt100ToPt(effectiveMargin.right),
             bottom: pt100ToPt(effectiveMargin.bottom),
             left: pt100ToPt(effectiveMargin.left),
         };
-        setMarginPt(next);
         const allEqual = next.top === next.right && next.top === next.bottom && next.top === next.left;
+
+        setMarginPt(next);
         setMarginLinked(allEqual);
         setLinkedMarginPt(next.top);
+        setHeaderPt(pt100ToPt(hf?.headerH ?? 0));
+        setFooterPt(pt100ToPt(hf?.footerH ?? 0));
+    }, [page?.id, preset?.id]);
 
-        const nextHeader = pt100ToPt(hf?.headerH ?? 0);
-        const nextFooter = pt100ToPt(hf?.footerH ?? 0);
-        setHeaderPt(nextHeader);
-        setFooterPt(nextFooter);
+    useEffect(() => {
+        if (!page || !preset || !effectiveMargin) return;
+
+        const next: MarginPt = {
+            top: pt100ToPt(effectiveMargin.top),
+            right: pt100ToPt(effectiveMargin.right),
+            bottom: pt100ToPt(effectiveMargin.bottom),
+            left: pt100ToPt(effectiveMargin.left),
+        };
+
+        setMarginPt(next);
+        if (marginLinked) setLinkedMarginPt(next.top);
+        setHeaderPt(pt100ToPt(hf?.headerH ?? 0));
+        setFooterPt(pt100ToPt(hf?.footerH ?? 0));
     }, [
         page?.id,
         preset?.id,
@@ -238,6 +253,7 @@ export function RightSidebar({
         effectiveMargin?.left,
         hf?.headerH,
         hf?.footerH,
+        marginLinked,
     ]);
 
     const onSetLinked = (nextLinked: boolean) => {
@@ -465,9 +481,23 @@ export function RightSidebar({
                 <section ref={addRef} style={{ marginBottom: 12 }}>
                     <div style={{ fontWeight: 800, marginBottom: 8 }}>Add</div>
                     <CollapsibleSection open={open.addContent} onToggle={() => toggle("addContent")} title="Content">
-                        <div style={{ fontSize: 12, color: "#4b5563", lineHeight: 1.5 }}>
-                            Placeholder content tools for adding text, image, shape, and fields.
-                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setTool("box")}
+                            style={{
+                                width: "100%",
+                                textAlign: "left",
+                                padding: "10px 12px",
+                                borderRadius: 10,
+                                border: "1px solid #d1d5db",
+                                background: session.tool === "box" ? "#111827" : "#fff",
+                                color: session.tool === "box" ? "#fff" : "#111827",
+                                cursor: "pointer",
+                                fontWeight: 800,
+                            }}
+                        >
+                            Box
+                        </button>
                     </CollapsibleSection>
                     <CollapsibleSection open={open.addLayout} onToggle={() => toggle("addLayout")} title="Layout">
                         <div style={{ fontSize: 12, color: "#4b5563", lineHeight: 1.5, marginBottom: 8 }}>

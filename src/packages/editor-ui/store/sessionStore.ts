@@ -8,6 +8,7 @@ export type SessionOnlyStore = {
     setZoom: (z: number) => void;
     setSelectedNodeIds: (ids: Id[]) => void;
     setEditingTarget: (t: "page" | "header" | "footer") => void;
+    setTool: (tool: EditorSession["tool"]) => void;
 };
 
 export function createInitialSession(activePageId: Id | null): EditorSession {
@@ -32,6 +33,7 @@ export function createSessionStore(
         setActivePage: (id) => setSession((s) => ({ ...s, activePageId: id })),
         setZoom: (z) => setSession((s) => ({ ...s, zoom: z })),
         setSelectedNodeIds: (ids) => setSession((s) => ({ ...s, selectedNodeIds: ids })),
+        setTool: (tool) => setSession((s) => ({ ...s, tool })),
         setEditingTarget: (t) =>
             setSession((s) => ({
                 ...s,

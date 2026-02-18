@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import type { DocumentJson, PageJson, PagePreset } from "../../editor-core/schema";
+import { createId, type DocumentJson, type PageJson, type PagePreset } from "../../editor-core/schema";
 import { NodeView } from "./NodeView";
 import * as Sel from "../../editor-core/schema/selectors";
 import { computePageRects } from "../../editor-core/geometry/pageMetrics";
@@ -18,6 +18,9 @@ function clamp(n: number, min: number, max: number) {
 function roundInt(n: number) {
     return Math.round(n);
 }
+
+const BOX_DEFAULT_W_PT100 = 12000;
+const BOX_DEFAULT_H_PT100 = 8000;
 
 export function PageView({
     document,
@@ -48,10 +51,12 @@ export function PageView({
     const {
         updatePresetMargin,
         updatePageMargin,
+        addNode,
         session,
         setEditingTarget,
         getNodesByTarget,
         setSelectedNodeIds,
+        setTool,
         updateRepeatAreaHeightPt,   // ✅ เพิ่ม
     } = useEditorStore();
 
@@ -388,8 +393,52 @@ export function PageView({
 
         const pw = pageWPtRef.current;
         const ph = pageHPtRef.current;
+        const { xPt, yPt } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
 
-        const { yPt } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
+        if (session.tool === "box") {
+            const contentRect = pageRectsPt.contentRectPt;
+            const fallbackRect = { x: 0, y: 0, w: pageWPt, h: pageHPt };
+            const placeRect =
+                contentRect.w > 0 && contentRect.h > 0
+                    ? contentRect
+                    : fallbackRect;
+
+            const minX = placeRect.x;
+            const minY = placeRect.y;
+            const maxX = Math.max(minX, placeRect.x + placeRect.w - BOX_DEFAULT_W_PT100);
+            const maxY = Math.max(minY, placeRect.y + placeRect.h - BOX_DEFAULT_H_PT100);
+
+            const nodeId = createId("box");
+            addNode(
+                page.id,
+                {
+                    id: nodeId,
+                    owner: { kind: "page", pageId: page.id },
+                    pageId: page.id,
+                    type: "box",
+                    name: "Box",
+                    x: roundInt(clamp(xPt, minX, maxX)),
+                    y: roundInt(clamp(yPt, minY, maxY)),
+                    w: BOX_DEFAULT_W_PT100,
+                    h: BOX_DEFAULT_H_PT100,
+                    visible: true,
+                    locked: false,
+                    style: {
+                        fill: "transparent",
+                        stroke: "#111827",
+                        strokeWidth: 100,
+                        radius: 0,
+                    },
+                },
+                "page"
+            );
+            setEditingTarget("page");
+            setSelectedNodeIds([nodeId]);
+            setTool("select");
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
 
         const nearHeaderBottom = headerHPt > 0 && Math.abs(yPt - pageRectsPt.lines.headerBottomY) <= HF_HIT;
         const nearFooterTop = footerHPt > 0 && Math.abs(yPt - pageRectsPt.lines.footerTopY) <= HF_HIT;
