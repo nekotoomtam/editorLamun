@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createId, type DocumentJson, type PageJson, type PagePreset } from "../../editor-core/schema";
 import { NodeView } from "./NodeView";
 import * as Sel from "../../editor-core/schema/selectors";
@@ -390,6 +390,27 @@ export function PageView({
         }
     }, [session.tool]);
 
+    const isPlacementActive = session.tool === "box";
+    const cancelPlacement = useCallback(() => {
+        if (!isPlacementActive) return;
+        setGhostBoxPt100(null);
+        setTool("select");
+    }, [isPlacementActive, setTool]);
+
+    useEffect(() => {
+        function onWindowKeyDown(ev: KeyboardEvent) {
+            if (ev.key !== "Escape") return;
+            if (!isPlacementActive) return;
+            ev.preventDefault();
+            cancelPlacement();
+        }
+
+        window.addEventListener("keydown", onWindowKeyDown);
+        return () => {
+            window.removeEventListener("keydown", onWindowKeyDown);
+        };
+    }, [isPlacementActive, cancelPlacement]);
+
 
     // ===== pointer handlers =====
     function onPointerMoveLocal(e: React.PointerEvent) {
@@ -756,6 +777,12 @@ export function PageView({
             onPointerMove={onPointerMoveLocal}
             onPointerLeave={onPointerLeave}
             onPointerDown={onPointerDown}
+            onContextMenu={(e) => {
+                if (!isPlacementActive) return;
+                e.preventDefault();
+                e.stopPropagation();
+                cancelPlacement();
+            }}
             onDoubleClick={(e) => {
                 if (thumbPreview) return;
 
