@@ -11,12 +11,25 @@ import { useEditorStore } from "../store/editorStore"; // ✅ เพิ่ม
 import { clientToPageDelta, clientToPagePoint } from "../utils/coords";
 
 type Side = "top" | "right" | "bottom" | "left";
+type RectPt100 = { x: number; y: number; w: number; h: number };
 
 function clamp(n: number, min: number, max: number) {
     return Math.max(min, Math.min(max, n));
 }
 function roundInt(n: number) {
     return Math.round(n);
+}
+
+function isOutOfBounds(rect: RectPt100, bounds: RectPt100) {
+    return rect.x < bounds.x || rect.y < bounds.y || (rect.x + rect.w) > (bounds.x + bounds.w) || (rect.y + rect.h) > (bounds.y + bounds.h);
+}
+
+function rectsOverlap(a: RectPt100, b: RectPt100) {
+    return a.x < (b.x + b.w) && (a.x + a.w) > b.x && a.y < (b.y + b.h) && (a.y + a.h) > b.y;
+}
+
+function isOverlappingAny(rect: RectPt100, nodesInBodyZone: RectPt100[]) {
+    return nodesInBodyZone.some((nodeRect) => rectsOverlap(rect, nodeRect));
 }
 
 const BOX_DEFAULT_W_PT100 = 12000;
@@ -90,6 +103,18 @@ export function PageView({
         }
         return list;
     }, [document.nodeOrderByPageId, document.nodesById, page.id, renderNodes, thumbPreview]);
+    const bodyNodesForPlacement = useMemo<RectPt100[]>(() => {
+        const order = document.nodeOrderByPageId?.[page.id] ?? [];
+        return order
+            .map((id) => document.nodesById?.[id])
+            .filter((n): n is NonNullable<typeof n> => !!n && n.visible !== false)
+            .map((n) => ({
+                x: n.x ?? 0,
+                y: n.y ?? 0,
+                w: n.w ?? 0,
+                h: n.h ?? 0,
+            }));
+    }, [document.nodeOrderByPageId, document.nodesById, page.id]);
 
     // ===== margin base (from doc) =====
     const baseMargin = Sel.getEffectiveMargin(document, page.id) ?? preset.margin;
@@ -368,17 +393,13 @@ export function PageView({
         const pw = pageWPtRef.current;
         const ph = pageHPtRef.current;
         const { xPt, yPt } = clientToPagePoint(el, clientX, clientY, pw, ph);
-        const bodyRect = pageRectsPt.bodyRectPt;
 
         const localX = xPt - bodyOrigin.x - BOX_DEFAULT_W_PT100 / 2;
         const localY = yPt - bodyOrigin.y - BOX_DEFAULT_H_PT100 / 2;
 
-        const maxX = Math.max(0, bodyRect.w - BOX_DEFAULT_W_PT100);
-        const maxY = Math.max(0, bodyRect.h - BOX_DEFAULT_H_PT100);
-
         return {
-            x: roundInt(clamp(localX, 0, maxX)),
-            y: roundInt(clamp(localY, 0, maxY)),
+            x: roundInt(localX),
+            y: roundInt(localY),
             w: BOX_DEFAULT_W_PT100,
             h: BOX_DEFAULT_H_PT100,
         };
@@ -391,6 +412,10 @@ export function PageView({
     }, [session.tool]);
 
     const isPlacementActive = session.tool === "box";
+    const isPlacementInvalid = useCallback((rect: RectPt100) => {
+        const bodyBoundsLocal: RectPt100 = { x: 0, y: 0, w: pageRectsPt.bodyRectPt.w, h: pageRectsPt.bodyRectPt.h };
+        return isOutOfBounds(rect, bodyBoundsLocal) || isOverlappingAny(rect, bodyNodesForPlacement);
+    }, [pageRectsPt.bodyRectPt.w, pageRectsPt.bodyRectPt.h, bodyNodesForPlacement]);
     const cancelPlacement = useCallback(() => {
         if (!isPlacementActive) return;
         setGhostBoxPt100(null);
@@ -478,6 +503,11 @@ export function PageView({
             if (e.button !== 0) return;
             const placement = computeBoxPlacementPt100(e.clientX, e.clientY);
             if (!placement) return;
+            if (isPlacementInvalid(placement)) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
             const nodeId = createId("box");
             addNode(
                 page.id,
@@ -755,6 +785,7 @@ export function PageView({
     const headerOrigin = { x: pageRectsPt.contentRectPt.x, y: pageRectsPt.headerRectPt.y };
     const bodyOrigin = { x: pageRectsPt.contentRectPt.x, y: pageRectsPt.bodyRectPt.y };
     const footerOrigin = { x: pageRectsPt.contentRectPt.x, y: pageRectsPt.footerRectPt.y };
+    const isGhostInvalid = !!ghostBoxPt100 && isPlacementInvalid(ghostBoxPt100);
 
 
     return (
@@ -1074,8 +1105,8 @@ export function PageView({
                         top: pt100ToPx(bodyOrigin.y + ghostBoxPt100.y),
                         width: pt100ToPx(ghostBoxPt100.w),
                         height: pt100ToPx(ghostBoxPt100.h),
-                        border: "1px dashed rgba(17,24,39,0.65)",
-                        background: "rgba(59,130,246,0.12)",
+                        border: isGhostInvalid ? "2px solid rgba(239,68,68,0.95)" : "1px dashed rgba(17,24,39,0.65)",
+                        background: isGhostInvalid ? "rgba(239,68,68,0.14)" : "rgba(59,130,246,0.12)",
                         pointerEvents: "none",
                         zIndex: 9,
                     }}
