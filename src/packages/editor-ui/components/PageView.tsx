@@ -52,11 +52,13 @@ export function PageView({
         updatePresetMargin,
         updatePageMargin,
         addNode,
+        updateNode,
         session,
         setEditingTarget,
         getNodesByTarget,
         setSelectedNodeIds,
         setTool,
+        setDrag,
         updateRepeatAreaHeightPt,   // ✅ เพิ่ม
     } = useEditorStore();
 
@@ -124,6 +126,10 @@ export function PageView({
 
     const previewMarginRef = useRef<PagePreset["margin"] | null>(null);
     useEffect(() => { previewMarginRef.current = previewMargin; }, [previewMargin]);
+    const sessionDragRef = useRef(session.drag ?? null);
+    useEffect(() => { sessionDragRef.current = session.drag ?? null; }, [session.drag]);
+    const docRef = useRef(document);
+    useEffect(() => { docRef.current = document; }, [document]);
 
     const pageWPtRef = useRef(pageWPt);
     const pageHPtRef = useRef(pageHPt);
@@ -138,6 +144,8 @@ export function PageView({
         updatePresetMargin,
         updatePageMargin,
         updateRepeatAreaHeightPt,
+        updateNode,
+        setDrag,
         setEditingTarget,
         setSelectedNodeIds,
     });
@@ -146,10 +154,12 @@ export function PageView({
             updatePresetMargin,
             updatePageMargin,
             updateRepeatAreaHeightPt,
+            updateNode,
+            setDrag,
             setEditingTarget,
             setSelectedNodeIds,
         };
-    }, [updatePresetMargin, updatePageMargin, updateRepeatAreaHeightPt, setEditingTarget, setSelectedNodeIds]);
+    }, [updatePresetMargin, updatePageMargin, updateRepeatAreaHeightPt, updateNode, setDrag, setEditingTarget, setSelectedNodeIds]);
 
 
 
@@ -168,6 +178,8 @@ export function PageView({
             footerAnchorToMargins,
         });
     }, [pageWPt, pageHPt, margin, headerHPt, footerHPt, headerAnchorToMargins, footerAnchorToMargins]);
+    const pageRectsRef = useRef(pageRectsPt);
+    useEffect(() => { pageRectsRef.current = pageRectsPt; }, [pageRectsPt]);
 
     const marginPx = {
         top: pt100ToPx(margin.top),
@@ -471,6 +483,8 @@ export function PageView({
             return;
         }
 
+        setSelectedNodeIds([]);
+
         const nearHeaderBottom = headerHPt > 0 && Math.abs(yPt - pageRectsPt.lines.headerBottomY) <= HF_HIT;
         const nearFooterTop = footerHPt > 0 && Math.abs(yPt - pageRectsPt.lines.footerTopY) <= HF_HIT;
 
@@ -557,7 +571,26 @@ export function PageView({
 
             // ✅ 2) margin drag
             const ctx = dragRef.current;
-            if (!ctx) return;
+            if (ctx) {
+                const el = wrapRef.current;
+                if (!el) return;
+
+                const pw = pageWPtRef.current;
+                const ph = pageHPtRef.current;
+
+                const cur = clientToPagePoint(el, ev.clientX, ev.clientY, pw, ph);
+                const { dx, dy } = clientToPageDelta(ctx.startPagePt, cur);
+                const shift = ev.shiftKey;
+
+                const result = applyDrag(ctx.side, ctx.startMargin, dx, dy, shift, ctx.pageWPt, ctx.pageHPt);
+                setPreviewMargin(result.margin);
+                setLimitSide(result.hitLimit ? ctx.side : null);
+                return;
+            }
+
+            // ✅ 3) node drag preview
+            const drag = sessionDragRef.current;
+            if (!drag) return;
 
             const el = wrapRef.current;
             if (!el) return;
@@ -565,13 +598,34 @@ export function PageView({
             const pw = pageWPtRef.current;
             const ph = pageHPtRef.current;
 
-            const cur = clientToPagePoint(el, ev.clientX, ev.clientY, pw, ph);
-            const { dx, dy } = clientToPageDelta(ctx.startPagePt, cur);
-            const shift = ev.shiftKey;
+            const startPt = clientToPagePoint(el, drag.startMouse.x, drag.startMouse.y, pw, ph);
+            const curPt = clientToPagePoint(el, ev.clientX, ev.clientY, pw, ph);
+            const { dx, dy } = clientToPageDelta(
+                { xPt: startPt.xPt, yPt: startPt.yPt },
+                { xPt: curPt.xPt, yPt: curPt.yPt }
+            );
 
-            const result = applyDrag(ctx.side, ctx.startMargin, dx, dy, shift, ctx.pageWPt, ctx.pageHPt);
-            setPreviewMargin(result.margin);
-            setLimitSide(result.hitLimit ? ctx.side : null);
+            const rects = pageRectsRef.current;
+            const node = docRef.current.nodesById?.[drag.nodeId];
+            if (!node) {
+                storeFnsRef.current.setDrag(null);
+                return;
+            }
+
+            const zone =
+                drag.target === "header"
+                    ? rects.headerRectPt
+                    : drag.target === "footer"
+                        ? rects.footerRectPt
+                        : rects.bodyRectPt;
+
+            const maxX = Math.max(0, zone.w - (node.w ?? 0));
+            const maxY = Math.max(0, zone.h - (node.h ?? 0));
+            const nextX = roundInt(clamp((drag.startRect.x ?? 0) + dx, 0, maxX));
+            const nextY = roundInt(clamp((drag.startRect.y ?? 0) + dy, 0, maxY));
+
+            if (nextX === drag.currentX && nextY === drag.currentY) return;
+            storeFnsRef.current.setDrag({ ...drag, currentX: nextX, currentY: nextY });
         }
 
         function onUp(ev: PointerEvent) {
@@ -612,31 +666,55 @@ export function PageView({
 
             // margin commit
             const ctx = dragRef.current;
-            if (!ctx) return;
+            if (ctx) {
+                const fns = storeFnsRef.current;
 
-            const fns = storeFnsRef.current;
+                const final = previewMarginRef.current ?? ctx.startMargin;
 
-            const final = previewMarginRef.current ?? ctx.startMargin;
+                const patch: Partial<PagePreset["margin"]> = {
+                    top: roundInt(final.top),
+                    right: roundInt(final.right),
+                    bottom: roundInt(final.bottom),
+                    left: roundInt(final.left),
+                };
 
-            const patch: Partial<PagePreset["margin"]> = {
-                top: roundInt(final.top),
-                right: roundInt(final.right),
-                bottom: roundInt(final.bottom),
-                left: roundInt(final.left),
-            };
+                if (ctx.source === "preset") {
+                    fns.updatePresetMargin(ctx.presetId, patch);
+                } else {
+                    fns.updatePageMargin(ctx.pageId, patch);
+                }
 
-            if (ctx.source === "preset") {
-                fns.updatePresetMargin(ctx.presetId, patch);
-            } else {
-                fns.updatePageMargin(ctx.pageId, patch);
+                try { el?.releasePointerCapture?.(ctx.pointerId); } catch { }
+
+                dragRef.current = null;
+                setDragSide(null);
+                setLimitSide(null);
+                setPreviewMargin(null);
+                return;
             }
 
-            try { el?.releasePointerCapture?.(ctx.pointerId); } catch { }
+            // node drag commit
+            const drag = sessionDragRef.current;
+            if (!drag) return;
 
-            dragRef.current = null;
-            setDragSide(null);
-            setLimitSide(null);
-            setPreviewMargin(null);
+            const node = docRef.current.nodesById?.[drag.nodeId];
+            if (node) {
+                const rects = pageRectsRef.current;
+                const zone =
+                    drag.target === "header"
+                        ? rects.headerRectPt
+                        : drag.target === "footer"
+                            ? rects.footerRectPt
+                            : rects.bodyRectPt;
+                const maxX = Math.max(0, zone.w - (node.w ?? 0));
+                const maxY = Math.max(0, zone.h - (node.h ?? 0));
+                const finalX = roundInt(clamp(drag.currentX ?? drag.startRect.x ?? 0, 0, maxX));
+                const finalY = roundInt(clamp(drag.currentY ?? drag.startRect.y ?? 0, 0, maxY));
+                storeFnsRef.current.updateNode(drag.nodeId, { x: finalX, y: finalY });
+            }
+
+            storeFnsRef.current.setDrag(null);
+            return;
         }
 
         window.addEventListener("pointermove", onMove);
