@@ -143,9 +143,10 @@ export type PageJson = {
     footerHidden?: boolean;
 };
 /**
- * Position/size อยู่ใน "page-space" เสมอ (origin = มุมซ้ายบนของกระดาษ)
- * - owner.kind === 'page' | 'header' | 'footer' ใช้พิกัดชุดเดียวกันทั้งหมด
- * - header/body/footer มีไว้เพื่อ “constraint/clip/targeting” เท่านั้น ห้าม offset พิกัดตอน render
+ * Nodes belong to a zone that defines their local coordinate space.
+ * - owner.kind === "page": the body/content zone of that page
+ * - owner.kind === "header": the preset header zone
+ * - owner.kind === "footer": the preset footer zone
  */
 export type NodeOwner =
     | { kind: "page"; pageId: Id }
@@ -165,9 +166,9 @@ export type NodeBase = {
     name?: string;
 
     /**
-     * Position/size อยู่ใน "page-space" เสมอ (origin = มุมซ้ายบนของกระดาษ)
-     * - สำหรับ owner.kind === 'page': x/y วัดจาก page origin
-     * - สำหรับ header/footer: x/y วัดจาก zone origin (ยังเป็น page-space แต่ UI อาจ offset ตอน render)
+     * Node geometry in Pt100, local to the owner zone.
+     * - x/y are measured from that zone's origin (body/header/footer), not page origin.
+     * - w/h are the node size in the same local Pt100 space.
      */
     x: Pt100;
     y: Pt100;

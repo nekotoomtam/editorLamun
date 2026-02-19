@@ -4,6 +4,7 @@ import {
     getPages,
     getEffectivePageMetrics,
 } from "../../editor-core/schema/selectors";
+import { getZoneOriginsPt100 } from "../../editor-core/geometry/nodeSpace";
 import type { DocumentLayout, LayoutNode, PageLayout } from "./types";
 
 export function computeLayout(document: DocumentJson): DocumentLayout {
@@ -51,21 +52,23 @@ export function computeLayout(document: DocumentJson): DocumentLayout {
         const headerTarget = getNodesByTarget(document, page.id, "header");
         const footerTarget = getNodesByTarget(document, page.id, "footer");
 
+        const zoneOrigins = getZoneOriginsPt100(m);
+
         const nodes: LayoutNode[] = [
             ...toLayoutNodes({
                 target: "page",
                 nodeOrder: pageTarget.nodeOrder,
                 nodesById: pageTarget.nodesById,
-                offsetX: m.contentRectPt?.x ?? 0,
-                offsetY: m.bodyRectPt?.y ?? 0,
+                offsetX: zoneOrigins.bodyOrigin.x,
+                offsetY: zoneOrigins.bodyOrigin.y,
             }),
             ...(m.headerH > 0
                 ? toLayoutNodes({
                     target: "header",
                     nodeOrder: headerTarget.nodeOrder,
                     nodesById: headerTarget.nodesById,
-                    offsetX: m.contentRectPt?.x ?? 0,
-                    offsetY: m.headerRectPt?.y ?? 0,
+                    offsetX: zoneOrigins.headerOrigin.x,
+                    offsetY: zoneOrigins.headerOrigin.y,
                 })
                 : []),
             ...(m.footerH > 0
@@ -73,8 +76,8 @@ export function computeLayout(document: DocumentJson): DocumentLayout {
                     target: "footer",
                     nodeOrder: footerTarget.nodeOrder,
                     nodesById: footerTarget.nodesById,
-                    offsetX: m.contentRectPt?.x ?? 0,
-                    offsetY: m.footerRectPt?.y ?? (m.pageHPt - m.footerH),
+                    offsetX: zoneOrigins.footerOrigin.x,
+                    offsetY: zoneOrigins.footerOrigin.y,
                 })
                 : []),
         ];
