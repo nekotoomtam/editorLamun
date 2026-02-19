@@ -469,6 +469,13 @@ export function PageView({
         const { yPt } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
 
         if (session.tool === "box") {
+            if (e.button === 2) {
+                e.preventDefault();
+                e.stopPropagation();
+                cancelPlacement();
+                return;
+            }
+            if (e.button !== 0) return;
             const placement = computeBoxPlacementPt100(e.clientX, e.clientY);
             if (!placement) return;
             const nodeId = createId("box");
@@ -778,10 +785,11 @@ export function PageView({
             onPointerLeave={onPointerLeave}
             onPointerDown={onPointerDown}
             onContextMenu={(e) => {
-                if (!isPlacementActive) return;
                 e.preventDefault();
                 e.stopPropagation();
-                cancelPlacement();
+                if (isPlacementActive) {
+                    cancelPlacement();
+                }
             }}
             onDoubleClick={(e) => {
                 if (thumbPreview) return;
