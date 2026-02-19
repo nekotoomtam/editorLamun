@@ -2,6 +2,7 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 import type { DocumentLayout, PageLayout, LayoutNode } from "../layout/types";
+import type { BoxNode } from "../../editor-core/schema";
 
 type ExportOptions = {
     // เผื่อปิด debug ทีหลัง
@@ -19,6 +20,30 @@ function rectToPt(rect: { x: number; y: number; w: number; h: number }): { x: nu
         w: toPt(rect.w),
         h: toPt(rect.h),
     };
+}
+
+function parseHexColor(input?: string) {
+    if (!input) return null;
+    const v = input.trim().toLowerCase();
+    if (v === "transparent") return null;
+    if (!v.startsWith("#")) return null;
+
+    const hex = v.slice(1);
+    if (hex.length === 3) {
+        const r = parseInt(hex[0] + hex[0], 16);
+        const g = parseInt(hex[1] + hex[1], 16);
+        const b = parseInt(hex[2] + hex[2], 16);
+        return rgb(r / 255, g / 255, b / 255);
+    }
+
+    if (hex.length === 6 || hex.length === 8) {
+        const r = parseInt(hex.slice(0, 2), 16);
+        const g = parseInt(hex.slice(2, 4), 16);
+        const b = parseInt(hex.slice(4, 6), 16);
+        return rgb(r / 255, g / 255, b / 255);
+    }
+
+    return null;
 }
 
 export async function exportProofPdf(
@@ -141,7 +166,25 @@ function drawNodeBox(page: any, font: any, n: LayoutNode, pageH: number) {
     const nodeRectPt = rectToPt({ x: n.x, y: n.y, w: n.w, h: n.h });
 
     // กล่อง node
-    drawRect(page, pageH, nodeRectPt, 1);
+    if (n.type === "box" && (n.node as BoxNode | undefined)?.type === "box") {
+        const box = n.node as BoxNode;
+        const fillColor = parseHexColor(box.style?.fill);
+        const strokeColor = parseHexColor(box.style?.stroke) ?? rgb(0, 0, 0);
+
+        page.drawRectangle({
+            x: nodeRectPt.x,
+            y: toPdfY(pageH, nodeRectPt.y, nodeRectPt.h),
+            width: nodeRectPt.w,
+            height: nodeRectPt.h,
+            borderWidth: toPt(box.style?.strokeWidth ?? 100),
+            borderColor: strokeColor,
+            color: fillColor ?? rgb(0, 0, 0),
+            opacity: fillColor ? 1 : 0,
+            borderOpacity: 1,
+        });
+    } else {
+        drawRect(page, pageH, nodeRectPt, 1);
+    }
 
     // label เล็ก ๆ
     const label = `${n.target}:${n.type}:${String(n.id).slice(0, 8)}`;
