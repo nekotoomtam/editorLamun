@@ -14,8 +14,12 @@ export type EditorSession = {
   // เผื่ออนาคตลาก/ย่อขยาย (ยังไม่ต้องใช้ก็ได้)
   drag?: null | {
     nodeId: Id;
+    target: "page" | "header" | "footer";
+    pointerId: number;
     startMouse: { x: number; y: number };
     startRect: { x: number; y: number; w: number; h: number };
+    currentX?: number;
+    currentY?: number;
   };
 
   resize?: null | {

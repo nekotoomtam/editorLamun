@@ -9,6 +9,7 @@ export type SessionOnlyStore = {
     setSelectedNodeIds: (ids: Id[]) => void;
     setEditingTarget: (t: "page" | "header" | "footer") => void;
     setTool: (tool: EditorSession["tool"]) => void;
+    setDrag: (drag: EditorSession["drag"]) => void;
 };
 
 export function createInitialSession(activePageId: Id | null): EditorSession {
@@ -34,12 +35,12 @@ export function createSessionStore(
         setZoom: (z) => setSession((s) => ({ ...s, zoom: z })),
         setSelectedNodeIds: (ids) => setSession((s) => ({ ...s, selectedNodeIds: ids })),
         setTool: (tool) => setSession((s) => ({ ...s, tool })),
+        setDrag: (drag) => setSession((s) => ({ ...s, drag })),
         setEditingTarget: (t) =>
             setSession((s) => ({
                 ...s,
                 editingTarget: t,
-                selectedNodeIds: [],
-                hoverNodeId: null,
             })),
+
     };
 }

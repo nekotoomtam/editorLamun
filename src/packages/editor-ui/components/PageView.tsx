@@ -543,9 +543,12 @@ export function PageView({
         console.log("contentRectPx:", contentRectPx);
     }, []);
 
+    const pendingDragRef = useRef<null | { nodeId: string; currentX: number; currentY: number; target: any }>(null);
+    const rafRef = useRef<number | null>(null);
     useEffect(() => {
         function onMove(ev: PointerEvent) {
             // ✅ 1) header/footer resize first
+
             const ctxHF = hfDragRef.current;
             if (ctxHF) {
                 const el = wrapRef.current;
@@ -589,7 +592,7 @@ export function PageView({
             }
 
             // ✅ 3) node drag preview
-            const drag = sessionDragRef.current;
+            const drag = sessionDragRef.current as (NonNullable<typeof session.drag> & { startPagePt?: { xPt: number; yPt: number } }) | null;
             if (!drag) return;
 
             const el = wrapRef.current;
@@ -598,12 +601,13 @@ export function PageView({
             const pw = pageWPtRef.current;
             const ph = pageHPtRef.current;
 
-            const startPt = clientToPagePoint(el, drag.startMouse.x, drag.startMouse.y, pw, ph);
             const curPt = clientToPagePoint(el, ev.clientX, ev.clientY, pw, ph);
-            const { dx, dy } = clientToPageDelta(
-                { xPt: startPt.xPt, yPt: startPt.yPt },
-                { xPt: curPt.xPt, yPt: curPt.yPt }
-            );
+            const startPagePt =
+                drag.startPagePt ??
+                clientToPagePoint(el, drag.startMouse.x, drag.startMouse.y, pw, ph);
+
+            const dx = curPt.xPt - startPagePt.xPt;
+            const dy = curPt.yPt - startPagePt.yPt;
 
             const rects = pageRectsRef.current;
             const node = docRef.current.nodesById?.[drag.nodeId];
@@ -624,8 +628,24 @@ export function PageView({
             const nextX = roundInt(clamp((drag.startRect.x ?? 0) + dx, 0, maxX));
             const nextY = roundInt(clamp((drag.startRect.y ?? 0) + dy, 0, maxY));
 
-            if (nextX === drag.currentX && nextY === drag.currentY) return;
-            storeFnsRef.current.setDrag({ ...drag, currentX: nextX, currentY: nextY });
+            pendingDragRef.current = { nodeId: drag.nodeId, currentX: nextX, currentY: nextY, target: drag.target };
+
+            if (rafRef.current == null) {
+                rafRef.current = requestAnimationFrame(() => {
+                    rafRef.current = null;
+                    const p = pendingDragRef.current;
+                    pendingDragRef.current = null;
+                    if (!p) return;
+
+                    const curDrag = sessionDragRef.current;
+                    if (!curDrag || curDrag.nodeId !== p.nodeId) return;
+
+                    const nextDrag = { ...curDrag, currentX: p.currentX, currentY: p.currentY };
+                    sessionDragRef.current = nextDrag;          // ✅
+                    storeFnsRef.current.setDrag(nextDrag);
+                });
+            }
+
         }
 
         function onUp(ev: PointerEvent) {
@@ -1065,17 +1085,17 @@ export function PageView({
                 <>
                     {/* Header nodes */}
                     {headerNodes.map((n) => (
-                        <NodeView key={n.id} doc={document} node={n} zoneOriginX={headerOrigin.x} zoneOriginY={headerOrigin.y} />
+                        <NodeView key={n.id} doc={document} node={n} zoneOriginX={headerOrigin.x} zoneOriginY={headerOrigin.y} pageWPt={pageWPt} pageHPt={pageHPt} />
                     ))}
 
                     {/* Page (body) nodes */}
                     {nodes.map((n) => (
-                        <NodeView key={n.id} doc={document} node={n} zoneOriginX={bodyOrigin.x} zoneOriginY={bodyOrigin.y} />
+                        <NodeView key={n.id} doc={document} node={n} zoneOriginX={bodyOrigin.x} zoneOriginY={bodyOrigin.y} pageWPt={pageWPt} pageHPt={pageHPt} />
                     ))}
 
                     {/* Footer nodes */}
                     {footerNodes.map((n) => (
-                        <NodeView key={n.id} doc={document} node={n} zoneOriginX={footerOrigin.x} zoneOriginY={footerOrigin.y} />
+                        <NodeView key={n.id} doc={document} node={n} zoneOriginX={footerOrigin.x} zoneOriginY={footerOrigin.y} pageWPt={pageWPt} pageHPt={pageHPt} />
                     ))}
                 </>
             )}
