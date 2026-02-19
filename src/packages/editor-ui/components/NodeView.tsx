@@ -4,6 +4,7 @@ import React from "react";
 import type { DocumentJson, NodeJson, AssetImage } from "../../editor-core/schema";
 import { pt100ToPx } from "../utils/units";
 import { useEditorSessionStore } from "../store/editorStore";
+import { clientToPagePoint } from "../utils/coords";
 
 type ImageFit = "contain" | "cover" | "stretch";
 const fitMap: Record<ImageFit, React.CSSProperties["objectFit"]> = {
@@ -17,20 +18,27 @@ export function NodeView({
     doc,
     zoneOriginX = 0,
     zoneOriginY = 0,
+    pageWPt,
+    pageHPt,
 }: {
     node: NodeJson;
     doc: DocumentJson;
     // node.x/y are Pt100 in local space of the target zone; zoneOriginX/Y are the page-space Pt100 origin of that zone.
     zoneOriginX?: number;
     zoneOriginY?: number;
+    pageWPt: number;
+    pageHPt: number;
 }) {
-    const { session, setSelectedNodeIds } = useEditorSessionStore();
+    const { session, setSelectedNodeIds, setDrag } = useEditorSessionStore();
 
     const selected = (session.selectedNodeIds ?? []).includes(node.id);
     const locked = (node as any).locked === true;
 
-    const leftPt = (node.x ?? 0) + zoneOriginX;
-    const topPt = (node.y ?? 0) + zoneOriginY;
+    const isDraggingThisNode = session.drag?.nodeId === node.id;
+    const nodeX = isDraggingThisNode ? (session.drag?.currentX ?? session.drag?.startRect.x ?? node.x ?? 0) : (node.x ?? 0);
+    const nodeY = isDraggingThisNode ? (session.drag?.currentY ?? session.drag?.startRect.y ?? node.y ?? 0) : (node.y ?? 0);
+    const leftPt = nodeX + zoneOriginX;
+    const topPt = nodeY + zoneOriginY;
     const widthPt = node.w ?? 0;
     const heightPt = node.h ?? 0;
 
@@ -51,24 +59,42 @@ export function NodeView({
 
     const onPick: React.PointerEventHandler<HTMLDivElement> = (e) => {
         e.stopPropagation();
-
-        const ids = session.selectedNodeIds ?? [];
-        if (e.shiftKey) {
-            if (ids.includes(node.id)) setSelectedNodeIds(ids.filter((x) => x !== node.id));
-            else setSelectedNodeIds([...ids, node.id]);
-            return;
-        }
+        e.preventDefault();
         setSelectedNodeIds([node.id]);
+        (e.currentTarget as any).setPointerCapture?.(e.pointerId);
+        const pageEl = ((e.currentTarget as any).offsetParent as HTMLElement | null) ?? e.currentTarget;
+        const startPt = clientToPagePoint(pageEl, e.clientX, e.clientY, pageWPt, pageHPt);
+
+        const target =
+            node.owner.kind === "header"
+                ? "header"
+                : node.owner.kind === "footer"
+                    ? "footer"
+                    : "page";
+
+        setDrag({
+            nodeId: node.id,
+            target,
+            pointerId: e.pointerId,
+            startMouse: { x: e.clientX, y: e.clientY },
+            startPagePt: { xPt: startPt.xPt, yPt: startPt.yPt },
+            startRect: { x: node.x ?? 0, y: node.y ?? 0, w: node.w ?? 0, h: node.h ?? 0 },
+            currentX: node.x ?? 0,
+            currentY: node.y ?? 0,
+        } as any);
     };
 
     if (node.type === "box") {
+        const borderWidthPx = pt100ToPx(node.style.strokeWidth ?? 100);
         return (
             <div
                 style={{
                     ...base,
                     ...outline,
                     background: node.style.fill ?? "transparent",
-                    border: `1px solid ${node.style.stroke ?? "rgba(0,0,0,0.25)"}`,
+                    borderStyle: "solid",
+                    borderWidth: borderWidthPx,
+                    borderColor: node.style.stroke ?? "rgba(0,0,0,0.25)",
                     borderRadius: pt100ToPx(node.style.radius ?? 0),
                     opacity: (node as any).opacity ?? 1,
                 }}
