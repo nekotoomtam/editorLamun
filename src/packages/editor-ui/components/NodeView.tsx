@@ -4,7 +4,6 @@ import React from "react";
 import type { DocumentJson, NodeJson, AssetImage } from "../../editor-core/schema";
 import { pt100ToPx } from "../utils/units";
 import { useEditorSessionStore } from "../store/editorStore";
-import { clientToPagePoint } from "../utils/coords";
 
 type ImageFit = "contain" | "cover" | "stretch";
 const fitMap: Record<ImageFit, React.CSSProperties["objectFit"]> = {
@@ -62,8 +61,6 @@ export function NodeView({
         e.preventDefault();
         setSelectedNodeIds([node.id]);
         (e.currentTarget as any).setPointerCapture?.(e.pointerId);
-        const pageEl = ((e.currentTarget as any).offsetParent as HTMLElement | null) ?? e.currentTarget;
-        const startPt = clientToPagePoint(pageEl, e.clientX, e.clientY, pageWPt, pageHPt);
 
         const target =
             node.owner.kind === "header"
@@ -77,11 +74,17 @@ export function NodeView({
             target,
             pointerId: e.pointerId,
             startMouse: { x: e.clientX, y: e.clientY },
-            startPagePt: { xPt: startPt.xPt, yPt: startPt.yPt },
-            startRect: { x: node.x ?? 0, y: node.y ?? 0, w: node.w ?? 0, h: node.h ?? 0 },
+            startRect: {
+                x: node.x ?? 0,
+                y: node.y ?? 0,
+                w: node.w ?? 0,
+                h: node.h ?? 0,
+            },
             currentX: node.x ?? 0,
             currentY: node.y ?? 0,
-        } as any);
+        });
+
+
     };
 
     if (node.type === "box") {
