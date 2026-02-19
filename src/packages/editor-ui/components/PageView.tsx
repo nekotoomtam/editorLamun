@@ -543,8 +543,6 @@ export function PageView({
         console.log("contentRectPx:", contentRectPx);
     }, []);
 
-    const pendingDragRef = useRef<null | { nodeId: string; currentX: number; currentY: number; target: any }>(null);
-    const rafRef = useRef<number | null>(null);
     useEffect(() => {
         function onMove(ev: PointerEvent) {
             // ✅ 1) header/footer resize first
@@ -591,60 +589,11 @@ export function PageView({
                 return;
             }
 
-            // ✅ 3) node drag preview
+            // ✅ 3) node drag preview (disabled intentionally)
             const drag = sessionDragRef.current as (NonNullable<typeof session.drag> & { startPagePt?: { xPt: number; yPt: number } }) | null;
             if (!drag) return;
-
-            const el = wrapRef.current;
-            if (!el) return;
-
-            const pw = pageWPtRef.current;
-            const ph = pageHPtRef.current;
-
-            const curPt = clientToPagePoint(el, ev.clientX, ev.clientY, pw, ph);
-            const startPagePt =
-                drag.startPagePt ??
-                clientToPagePoint(el, drag.startMouse.x, drag.startMouse.y, pw, ph);
-
-            const dx = curPt.xPt - startPagePt.xPt;
-            const dy = curPt.yPt - startPagePt.yPt;
-
-            const rects = pageRectsRef.current;
-            const node = docRef.current.nodesById?.[drag.nodeId];
-            if (!node) {
-                storeFnsRef.current.setDrag(null);
-                return;
-            }
-
-            const zone =
-                drag.target === "header"
-                    ? rects.headerRectPt
-                    : drag.target === "footer"
-                        ? rects.footerRectPt
-                        : rects.bodyRectPt;
-
-            const maxX = Math.max(0, zone.w - (node.w ?? 0));
-            const maxY = Math.max(0, zone.h - (node.h ?? 0));
-            const nextX = roundInt(clamp((drag.startRect.x ?? 0) + dx, 0, maxX));
-            const nextY = roundInt(clamp((drag.startRect.y ?? 0) + dy, 0, maxY));
-
-            pendingDragRef.current = { nodeId: drag.nodeId, currentX: nextX, currentY: nextY, target: drag.target };
-
-            if (rafRef.current == null) {
-                rafRef.current = requestAnimationFrame(() => {
-                    rafRef.current = null;
-                    const p = pendingDragRef.current;
-                    pendingDragRef.current = null;
-                    if (!p) return;
-
-                    const curDrag = sessionDragRef.current;
-                    if (!curDrag || curDrag.nodeId !== p.nodeId) return;
-
-                    const nextDrag = { ...curDrag, currentX: p.currentX, currentY: p.currentY };
-                    sessionDragRef.current = nextDrag;          // ✅
-                    storeFnsRef.current.setDrag(nextDrag);
-                });
-            }
+            storeFnsRef.current.setDrag(null);
+            return;
 
         }
 
@@ -713,26 +662,9 @@ export function PageView({
                 return;
             }
 
-            // node drag commit
+            // node drag commit (disabled intentionally)
             const drag = sessionDragRef.current;
             if (!drag) return;
-
-            const node = docRef.current.nodesById?.[drag.nodeId];
-            if (node) {
-                const rects = pageRectsRef.current;
-                const zone =
-                    drag.target === "header"
-                        ? rects.headerRectPt
-                        : drag.target === "footer"
-                            ? rects.footerRectPt
-                            : rects.bodyRectPt;
-                const maxX = Math.max(0, zone.w - (node.w ?? 0));
-                const maxY = Math.max(0, zone.h - (node.h ?? 0));
-                const finalX = roundInt(clamp(drag.currentX ?? drag.startRect.x ?? 0, 0, maxX));
-                const finalY = roundInt(clamp(drag.currentY ?? drag.startRect.y ?? 0, 0, maxY));
-                storeFnsRef.current.updateNode(drag.nodeId, { x: finalX, y: finalY });
-            }
-
             storeFnsRef.current.setDrag(null);
             return;
         }

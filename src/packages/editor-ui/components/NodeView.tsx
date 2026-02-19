@@ -28,14 +28,13 @@ export function NodeView({
     pageWPt: number;
     pageHPt: number;
 }) {
-    const { session, setSelectedNodeIds, setDrag } = useEditorSessionStore();
+    const { session, setSelectedNodeIds } = useEditorSessionStore();
 
     const selected = (session.selectedNodeIds ?? []).includes(node.id);
     const locked = (node as any).locked === true;
 
-    const isDraggingThisNode = session.drag?.nodeId === node.id;
-    const nodeX = isDraggingThisNode ? (session.drag?.currentX ?? session.drag?.startRect.x ?? node.x ?? 0) : (node.x ?? 0);
-    const nodeY = isDraggingThisNode ? (session.drag?.currentY ?? session.drag?.startRect.y ?? node.y ?? 0) : (node.y ?? 0);
+    const nodeX = node.x ?? 0;
+    const nodeY = node.y ?? 0;
     const leftPt = nodeX + zoneOriginX;
     const topPt = nodeY + zoneOriginY;
     const widthPt = node.w ?? 0;
@@ -49,6 +48,7 @@ export function NodeView({
         height: pt100ToPx(heightPt),
         boxSizing: "border-box",
         userSelect: "none",
+        cursor: "default",
         pointerEvents: locked ? "none" : "auto",
     };
 
@@ -60,31 +60,6 @@ export function NodeView({
         e.stopPropagation();
         e.preventDefault();
         setSelectedNodeIds([node.id]);
-        (e.currentTarget as any).setPointerCapture?.(e.pointerId);
-
-        const target =
-            node.owner.kind === "header"
-                ? "header"
-                : node.owner.kind === "footer"
-                    ? "footer"
-                    : "page";
-
-        setDrag({
-            nodeId: node.id,
-            target,
-            pointerId: e.pointerId,
-            startMouse: { x: e.clientX, y: e.clientY },
-            startRect: {
-                x: node.x ?? 0,
-                y: node.y ?? 0,
-                w: node.w ?? 0,
-                h: node.h ?? 0,
-            },
-            currentX: node.x ?? 0,
-            currentY: node.y ?? 0,
-        });
-
-
     };
 
     if (node.type === "box") {
