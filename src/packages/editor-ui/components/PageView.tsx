@@ -76,6 +76,7 @@ export function PageView({
 
     const [previewHeaderH, setPreviewHeaderH] = useState<number | null>(null);
     const [previewFooterH, setPreviewFooterH] = useState<number | null>(null);
+    const [ghostBoxPt100, setGhostBoxPt100] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
 
     const nodes = useMemo(() => {
         if (!renderNodes) return [];
@@ -348,12 +349,50 @@ export function PageView({
         }
     }
 
+    function computeBoxPlacementPt100(clientX: number, clientY: number) {
+        const el = wrapRef.current;
+        if (!el) return null;
+
+        const pw = pageWPtRef.current;
+        const ph = pageHPtRef.current;
+        const { xPt, yPt } = clientToPagePoint(el, clientX, clientY, pw, ph);
+        const bodyRect = pageRectsPt.bodyRectPt;
+
+        const localX = xPt - bodyOrigin.x - BOX_DEFAULT_W_PT100 / 2;
+        const localY = yPt - bodyOrigin.y - BOX_DEFAULT_H_PT100 / 2;
+
+        const maxX = Math.max(0, bodyRect.w - BOX_DEFAULT_W_PT100);
+        const maxY = Math.max(0, bodyRect.h - BOX_DEFAULT_H_PT100);
+
+        return {
+            x: roundInt(clamp(localX, 0, maxX)),
+            y: roundInt(clamp(localY, 0, maxY)),
+            w: BOX_DEFAULT_W_PT100,
+            h: BOX_DEFAULT_H_PT100,
+        };
+    }
+
+    useEffect(() => {
+        if (session.tool !== "box") {
+            setGhostBoxPt100(null);
+        }
+    }, [session.tool]);
+
 
     // ===== pointer handlers =====
     function onPointerMoveLocal(e: React.PointerEvent) {
         if (dragRef.current || hfDragRef.current) return;
         const el = wrapRef.current;
         if (!el) return;
+
+        if (session.tool === "box") {
+            const placement = computeBoxPlacementPt100(e.clientX, e.clientY);
+            setGhostBoxPt100(placement);
+            setHoverSide(null);
+            setLimitSide(null);
+            (wrapRef.current as any).style.cursor = "crosshair";
+            return;
+        }
 
         const pw = pageWPtRef.current;
         const ph = pageHPtRef.current;
@@ -380,6 +419,7 @@ export function PageView({
         if (dragRef.current || hfDragRef.current) return;
         setHoverSide(null);
         setLimitSide(null);
+        setGhostBoxPt100(null);
         (wrapRef.current as any).style.cursor = "default";
     }
 
@@ -393,21 +433,11 @@ export function PageView({
 
         const pw = pageWPtRef.current;
         const ph = pageHPtRef.current;
-        const { xPt, yPt } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
+        const { yPt } = clientToPagePoint(el, e.clientX, e.clientY, pw, ph);
 
         if (session.tool === "box") {
-            const contentRect = pageRectsPt.contentRectPt;
-            const fallbackRect = { x: 0, y: 0, w: pageWPt, h: pageHPt };
-            const placeRect =
-                contentRect.w > 0 && contentRect.h > 0
-                    ? contentRect
-                    : fallbackRect;
-
-            const minX = placeRect.x;
-            const minY = placeRect.y;
-            const maxX = Math.max(minX, placeRect.x + placeRect.w - BOX_DEFAULT_W_PT100);
-            const maxY = Math.max(minY, placeRect.y + placeRect.h - BOX_DEFAULT_H_PT100);
-
+            const placement = computeBoxPlacementPt100(e.clientX, e.clientY);
+            if (!placement) return;
             const nodeId = createId("box");
             addNode(
                 page.id,
@@ -417,10 +447,10 @@ export function PageView({
                     pageId: page.id,
                     type: "box",
                     name: "Box",
-                    x: roundInt(clamp(xPt, minX, maxX)),
-                    y: roundInt(clamp(yPt, minY, maxY)),
-                    w: BOX_DEFAULT_W_PT100,
-                    h: BOX_DEFAULT_H_PT100,
+                    x: placement.x,
+                    y: placement.y,
+                    w: placement.w,
+                    h: placement.h,
                     visible: true,
                     locked: false,
                     style: {
@@ -435,6 +465,7 @@ export function PageView({
             setEditingTarget("page");
             setSelectedNodeIds([nodeId]);
             setTool("select");
+            setGhostBoxPt100(null);
             e.preventDefault();
             e.stopPropagation();
             return;
@@ -969,6 +1000,21 @@ export function PageView({
                         <NodeView key={n.id} doc={document} node={n} zoneOriginX={footerOrigin.x} zoneOriginY={footerOrigin.y} />
                     ))}
                 </>
+            )}
+            {ghostBoxPt100 && session.tool === "box" && (
+                <div
+                    style={{
+                        position: "absolute",
+                        left: pt100ToPx(bodyOrigin.x + ghostBoxPt100.x),
+                        top: pt100ToPx(bodyOrigin.y + ghostBoxPt100.y),
+                        width: pt100ToPx(ghostBoxPt100.w),
+                        height: pt100ToPx(ghostBoxPt100.h),
+                        border: "1px dashed rgba(17,24,39,0.65)",
+                        background: "rgba(59,130,246,0.12)",
+                        pointerEvents: "none",
+                        zIndex: 9,
+                    }}
+                />
             )}
 
 
