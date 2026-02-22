@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createId, type DocumentJson, type PageJson, type PagePreset } from "../../editor-core/schema";
-import { NodeView } from "./NodeView";
+import { NodeView, type NodeDragStartPayload } from "./NodeView";
 import * as Sel from "../../editor-core/schema/selectors";
 import { computePageRects } from "../../editor-core/geometry/pageMetrics";
 import * as Cmd from "../../editor-core/commands/docCommands";
@@ -12,12 +12,37 @@ import { clientToPageDelta, clientToPagePoint } from "../utils/coords";
 
 type Side = "top" | "right" | "bottom" | "left";
 type RectPt100 = { x: number; y: number; w: number; h: number };
+type GuideLine = {
+    orientation: "v" | "h";
+    pos: number;
+    from: number;
+    to: number;
+};
 
 function clamp(n: number, min: number, max: number) {
     return Math.max(min, Math.min(max, n));
 }
 function roundInt(n: number) {
     return Math.round(n);
+}
+
+function clampRectWithinZone(x: number, y: number, w: number, h: number, zoneRect: RectPt100) {
+    const minX = zoneRect.x;
+    const minY = zoneRect.y;
+    const maxX = Math.max(minX, zoneRect.x + zoneRect.w - w);
+    const maxY = Math.max(minY, zoneRect.y + zoneRect.h - h);
+    return {
+        x: clamp(x, minX, maxX),
+        y: clamp(y, minY, maxY),
+    };
+}
+
+function applyDragAssist(args: { rawX: number; rawY: number }) {
+    return {
+        x: args.rawX,
+        y: args.rawY,
+        guides: [] as GuideLine[],
+    };
 }
 
 function isOutOfBounds(rect: RectPt100, bounds: RectPt100) {
@@ -144,6 +169,14 @@ export function PageView({
     const [dragSide, setDragSide] = useState<Side | null>(null);
     const [previewMargin, setPreviewMargin] = useState<PagePreset["margin"] | null>(null);
     const [limitSide, setLimitSide] = useState<Side | null>(null);
+    const [dragPreview, setDragPreview] = useState<null | {
+        nodeId: string;
+        x: number;
+        y: number;
+        rawX: number;
+        rawY: number;
+        guides: GuideLine[];
+    }>(null);
 
     // ใช้ margin สำหรับ render (ถ้ากำลังลาก ให้ใช้ preview)
     const margin = previewMargin ?? baseMargin;
@@ -151,11 +184,15 @@ export function PageView({
 
     const previewMarginRef = useRef<PagePreset["margin"] | null>(null);
     useEffect(() => { previewMarginRef.current = previewMargin; }, [previewMargin]);
-    const sessionDragRef = useRef(session.drag ?? null);
-    useEffect(() => { sessionDragRef.current = session.drag ?? null; }, [session.drag]);
-    const docRef = useRef(document);
-    useEffect(() => { docRef.current = document; }, [document]);
-
+    const dragPreviewRef = useRef<null | {
+        nodeId: string;
+        x: number;
+        y: number;
+        rawX: number;
+        rawY: number;
+        guides: GuideLine[];
+    }>(null);
+    useEffect(() => { dragPreviewRef.current = dragPreview; }, [dragPreview]);
     const pageWPtRef = useRef(pageWPt);
     const pageHPtRef = useRef(pageHPt);
 
@@ -163,6 +200,24 @@ export function PageView({
 
     const hfZoneRef = useRef(hfZone);
     useEffect(() => { hfZoneRef.current = hfZone; }, [hfZone]);
+
+    const nodeDragRef = useRef<null | {
+        nodeId: string;
+        ownerKind: "page" | "header" | "footer";
+        pointerId: number;
+        startPagePt: { xPt: number; yPt: number };
+        startNodeLocalX: number;
+        startNodeLocalY: number;
+        startNodePageX: number;
+        startNodePageY: number;
+        w: number;
+        h: number;
+        zoneOrigin: { x: number; y: number };
+        zoneRect: RectPt100;
+    }>(null);
+    const nodeDragLastClientRef = useRef<{ x: number; y: number } | null>(null);
+    const nodeDragRafPendingRef = useRef(false);
+    const nodeDragRafRef = useRef<number | null>(null);
 
     // เก็บฟังก์ชันจาก store ไว้ใน ref กัน identity เปลี่ยนแล้ว effect วิ่ง
     const storeFnsRef = useRef({
@@ -205,6 +260,78 @@ export function PageView({
     }, [pageWPt, pageHPt, margin, headerHPt, footerHPt, headerAnchorToMargins, footerAnchorToMargins]);
     const pageRectsRef = useRef(pageRectsPt);
     useEffect(() => { pageRectsRef.current = pageRectsPt; }, [pageRectsPt]);
+
+    const getZoneForOwner = useCallback((ownerKind: "page" | "header" | "footer") => {
+        const rects = pageRectsRef.current;
+        if (ownerKind === "header") {
+            return {
+                origin: { x: rects.headerRectPt.x, y: rects.headerRectPt.y },
+                zoneRect: rects.headerRectPt,
+            };
+        }
+        if (ownerKind === "footer") {
+            return {
+                origin: { x: rects.footerRectPt.x, y: rects.footerRectPt.y },
+                zoneRect: rects.footerRectPt,
+            };
+        }
+        return {
+            origin: { x: rects.contentRectPt.x, y: rects.contentRectPt.y },
+            zoneRect: rects.contentRectPt,
+        };
+    }, []);
+
+    const onStartNodeDrag = useCallback((payload: NodeDragStartPayload) => {
+        if (thumbPreview) return;
+        if (session.tool !== "select") return;
+
+        const { origin, zoneRect } = getZoneForOwner(payload.ownerKind);
+        const startNodePageX = payload.startNodePosPt100.x + origin.x;
+        const startNodePageY = payload.startNodePosPt100.y + origin.y;
+
+        nodeDragRef.current = {
+            nodeId: payload.nodeId,
+            ownerKind: payload.ownerKind,
+            pointerId: payload.pointerId,
+            startPagePt: payload.startPagePt,
+            startNodeLocalX: payload.startNodePosPt100.x,
+            startNodeLocalY: payload.startNodePosPt100.y,
+            startNodePageX,
+            startNodePageY,
+            w: payload.nodeSizePt100.w,
+            h: payload.nodeSizePt100.h,
+            zoneOrigin: origin,
+            zoneRect,
+        };
+        nodeDragLastClientRef.current = null;
+        nodeDragRafPendingRef.current = false;
+        if (nodeDragRafRef.current != null) {
+            window.cancelAnimationFrame(nodeDragRafRef.current);
+            nodeDragRafRef.current = null;
+        }
+        setDragPreview({
+            nodeId: payload.nodeId,
+            x: payload.startNodePosPt100.x,
+            y: payload.startNodePosPt100.y,
+            rawX: startNodePageX,
+            rawY: startNodePageY,
+            guides: [],
+        });
+        setDrag({
+            nodeId: payload.nodeId,
+            target: payload.ownerKind,
+            pointerId: payload.pointerId,
+            startMouse: { x: payload.startPagePt.xPt, y: payload.startPagePt.yPt },
+            startRect: {
+                x: payload.startNodePosPt100.x,
+                y: payload.startNodePosPt100.y,
+                w: payload.nodeSizePt100.w,
+                h: payload.nodeSizePt100.h,
+            },
+            currentX: payload.startNodePosPt100.x,
+            currentY: payload.startNodePosPt100.y,
+        });
+    }, [getZoneForOwner, session.tool, setDrag, thumbPreview]);
 
     const marginPx = {
         top: pt100ToPx(margin.top),
@@ -439,7 +566,7 @@ export function PageView({
 
     // ===== pointer handlers =====
     function onPointerMoveLocal(e: React.PointerEvent) {
-        if (dragRef.current || hfDragRef.current) return;
+        if (dragRef.current || hfDragRef.current || nodeDragRef.current) return;
         const el = wrapRef.current;
         if (!el) return;
 
@@ -474,7 +601,7 @@ export function PageView({
     }
 
     function onPointerLeave() {
-        if (dragRef.current || hfDragRef.current) return;
+        if (dragRef.current || hfDragRef.current || nodeDragRef.current) return;
         setHoverSide(null);
         setLimitSide(null);
         setGhostBoxPt100(null);
@@ -594,14 +721,6 @@ export function PageView({
         e.preventDefault();
     }
     useEffect(() => {
-        console.log("pageW pt:", pageWPt);
-        console.log("pageH pt:", pageHPt);
-        console.log("pageW px:", pageWPx);
-        console.log("pageH px:", pageHPx);
-        console.log("contentRectPx:", contentRectPx);
-    }, []);
-
-    useEffect(() => {
         function onMove(ev: PointerEvent) {
             // ✅ 1) header/footer resize first
 
@@ -647,10 +766,41 @@ export function PageView({
                 return;
             }
 
-            // ✅ 3) node drag preview (disabled intentionally)
-            const drag = sessionDragRef.current as (NonNullable<typeof session.drag> & { startPagePt?: { xPt: number; yPt: number } }) | null;
-            if (!drag) return;
-            storeFnsRef.current.setDrag(null);
+            // ✅ 3) node drag preview (RAF + pt100 preview only)
+            const nodeDrag = nodeDragRef.current;
+            if (!nodeDrag) return;
+
+            nodeDragLastClientRef.current = { x: ev.clientX, y: ev.clientY };
+            if (nodeDragRafPendingRef.current) return;
+
+            nodeDragRafPendingRef.current = true;
+            nodeDragRafRef.current = window.requestAnimationFrame(() => {
+                nodeDragRafPendingRef.current = false;
+                const el = wrapRef.current;
+                const curDrag = nodeDragRef.current;
+                const lastClient = nodeDragLastClientRef.current;
+                if (!el || !curDrag || !lastClient) return;
+
+                const pw = pageWPtRef.current;
+                const ph = pageHPtRef.current;
+                const cur = clientToPagePoint(el, lastClient.x, lastClient.y, pw, ph);
+                const dx = cur.xPt - curDrag.startPagePt.xPt;
+                const dy = cur.yPt - curDrag.startPagePt.yPt;
+
+                const rawX = curDrag.startNodePageX + dx;
+                const rawY = curDrag.startNodePageY + dy;
+                const assisted = applyDragAssist({ rawX, rawY });
+                const final = clampRectWithinZone(assisted.x, assisted.y, curDrag.w, curDrag.h, curDrag.zoneRect);
+
+                setDragPreview({
+                    nodeId: curDrag.nodeId,
+                    x: roundInt(final.x - curDrag.zoneOrigin.x),
+                    y: roundInt(final.y - curDrag.zoneOrigin.y),
+                    rawX,
+                    rawY,
+                    guides: assisted.guides,
+                });
+            });
             return;
 
         }
@@ -720,9 +870,24 @@ export function PageView({
                 return;
             }
 
-            // node drag commit (disabled intentionally)
-            const drag = sessionDragRef.current;
-            if (!drag) return;
+            // node drag commit (single commit on pointer up)
+            const nodeDrag = nodeDragRef.current;
+            if (!nodeDrag) return;
+
+            const preview = dragPreviewRef.current;
+            const nextX = roundInt(preview?.nodeId === nodeDrag.nodeId ? preview.x : nodeDrag.startNodeLocalX);
+            const nextY = roundInt(preview?.nodeId === nodeDrag.nodeId ? preview.y : nodeDrag.startNodeLocalY);
+            storeFnsRef.current.updateNode(nodeDrag.nodeId, { x: nextX, y: nextY });
+
+            try { el?.releasePointerCapture?.(nodeDrag.pointerId); } catch { }
+            if (nodeDragRafRef.current != null) {
+                window.cancelAnimationFrame(nodeDragRafRef.current);
+                nodeDragRafRef.current = null;
+            }
+            nodeDragRafPendingRef.current = false;
+            nodeDragLastClientRef.current = null;
+            nodeDragRef.current = null;
+            setDragPreview(null);
             storeFnsRef.current.setDrag(null);
             return;
         }
@@ -732,6 +897,11 @@ export function PageView({
         return () => {
             window.removeEventListener("pointermove", onMove);
             window.removeEventListener("pointerup", onUp);
+            if (nodeDragRafRef.current != null) {
+                window.cancelAnimationFrame(nodeDragRafRef.current);
+                nodeDragRafRef.current = null;
+            }
+            nodeDragRafPendingRef.current = false;
         };
     }, []);
 
@@ -1083,17 +1253,50 @@ export function PageView({
                 <>
                     {/* Header nodes */}
                     {headerNodes.map((n) => (
-                        <NodeView key={n.id} doc={document} node={n} zoneOriginX={headerOrigin.x} zoneOriginY={headerOrigin.y} pageWPt={pageWPt} pageHPt={pageHPt} />
+                        <NodeView
+                            key={n.id}
+                            doc={document}
+                            node={n}
+                            zoneOriginX={headerOrigin.x}
+                            zoneOriginY={headerOrigin.y}
+                            pageWPt={pageWPt}
+                            pageHPt={pageHPt}
+                            pageEl={wrapRef.current}
+                            onStartNodeDrag={onStartNodeDrag}
+                            dragPreview={dragPreview}
+                        />
                     ))}
 
                     {/* Page (body) nodes */}
                     {nodes.map((n) => (
-                        <NodeView key={n.id} doc={document} node={n} zoneOriginX={bodyOrigin.x} zoneOriginY={bodyOrigin.y} pageWPt={pageWPt} pageHPt={pageHPt} />
+                        <NodeView
+                            key={n.id}
+                            doc={document}
+                            node={n}
+                            zoneOriginX={bodyOrigin.x}
+                            zoneOriginY={bodyOrigin.y}
+                            pageWPt={pageWPt}
+                            pageHPt={pageHPt}
+                            pageEl={wrapRef.current}
+                            onStartNodeDrag={onStartNodeDrag}
+                            dragPreview={dragPreview}
+                        />
                     ))}
 
                     {/* Footer nodes */}
                     {footerNodes.map((n) => (
-                        <NodeView key={n.id} doc={document} node={n} zoneOriginX={footerOrigin.x} zoneOriginY={footerOrigin.y} pageWPt={pageWPt} pageHPt={pageHPt} />
+                        <NodeView
+                            key={n.id}
+                            doc={document}
+                            node={n}
+                            zoneOriginX={footerOrigin.x}
+                            zoneOriginY={footerOrigin.y}
+                            pageWPt={pageWPt}
+                            pageHPt={pageHPt}
+                            pageEl={wrapRef.current}
+                            onStartNodeDrag={onStartNodeDrag}
+                            dragPreview={dragPreview}
+                        />
                     ))}
                 </>
             )}

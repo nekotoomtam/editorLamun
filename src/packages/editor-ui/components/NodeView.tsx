@@ -1,9 +1,10 @@
 "use client";
 
 import React from "react";
-import type { DocumentJson, NodeJson, AssetImage } from "../../editor-core/schema";
+import type { DocumentJson, NodeJson, AssetImage, Id, NodeOwner } from "../../editor-core/schema";
 import { pt100ToPx } from "../utils/units";
 import { useEditorSessionStore } from "../store/editorStore";
+import { clientToPagePoint } from "../utils/coords";
 
 type ImageFit = "contain" | "cover" | "stretch";
 const fitMap: Record<ImageFit, React.CSSProperties["objectFit"]> = {
@@ -12,14 +13,22 @@ const fitMap: Record<ImageFit, React.CSSProperties["objectFit"]> = {
     stretch: "fill",
 };
 
-export function NodeView({
-    node,
-    doc,
-    zoneOriginX = 0,
-    zoneOriginY = 0,
-    pageWPt,
-    pageHPt,
-}: {
+export type NodeDragStartPayload = {
+    nodeId: Id;
+    startPagePt: { xPt: number; yPt: number };
+    startNodePosPt100: { x: number; y: number };
+    nodeSizePt100: { w: number; h: number };
+    ownerKind: NodeOwner["kind"];
+    pointerId: number;
+};
+
+type DragPreview = {
+    nodeId: Id;
+    x: number;
+    y: number;
+};
+
+type NodeViewProps = {
     node: NodeJson;
     doc: DocumentJson;
     // node.x/y are Pt100 in local space of the target zone; zoneOriginX/Y are the page-space Pt100 origin of that zone.
@@ -27,14 +36,30 @@ export function NodeView({
     zoneOriginY?: number;
     pageWPt: number;
     pageHPt: number;
-}) {
+    pageEl?: HTMLElement | null;
+    onStartNodeDrag?: (payload: NodeDragStartPayload) => void;
+    dragPreview?: DragPreview | null;
+};
+
+function NodeViewInner({
+    node,
+    doc,
+    zoneOriginX = 0,
+    zoneOriginY = 0,
+    pageWPt,
+    pageHPt,
+    pageEl = null,
+    onStartNodeDrag,
+    dragPreview = null,
+}: NodeViewProps) {
     const { session, setSelectedNodeIds } = useEditorSessionStore();
 
     const selected = (session.selectedNodeIds ?? []).includes(node.id);
     const locked = (node as any).locked === true;
 
-    const nodeX = node.x ?? 0;
-    const nodeY = node.y ?? 0;
+    const preview = dragPreview && dragPreview.nodeId === node.id ? dragPreview : null;
+    const nodeX = preview?.x ?? node.x ?? 0;
+    const nodeY = preview?.y ?? node.y ?? 0;
     const leftPt = nodeX + zoneOriginX;
     const topPt = nodeY + zoneOriginY;
     const widthPt = node.w ?? 0;
@@ -62,6 +87,27 @@ export function NodeView({
         setSelectedNodeIds([node.id]);
     };
 
+    const onPointerDownBox: React.PointerEventHandler<HTMLDivElement> = (e) => {
+        onPick(e);
+        if (!onStartNodeDrag) return;
+        if (e.button !== 0) return;
+        if (!pageEl || locked) return;
+
+        try {
+            (e.currentTarget as HTMLDivElement).setPointerCapture?.(e.pointerId);
+        } catch { }
+
+        const start = clientToPagePoint(pageEl, e.clientX, e.clientY, pageWPt, pageHPt);
+        onStartNodeDrag({
+            nodeId: node.id,
+            startPagePt: { xPt: start.xPt, yPt: start.yPt },
+            startNodePosPt100: { x: node.x ?? 0, y: node.y ?? 0 },
+            nodeSizePt100: { w: node.w ?? 0, h: node.h ?? 0 },
+            ownerKind: node.owner.kind,
+            pointerId: e.pointerId,
+        });
+    };
+
     if (node.type === "box") {
         const borderWidthPx = pt100ToPx(node.style.strokeWidth ?? 100);
         return (
@@ -76,7 +122,7 @@ export function NodeView({
                     borderRadius: pt100ToPx(node.style.radius ?? 0),
                     opacity: (node as any).opacity ?? 1,
                 }}
-                onPointerDown={onPick}
+                onPointerDown={onPointerDownBox}
                 title={node.name ?? node.id}
             />
         );
@@ -137,3 +183,20 @@ export function NodeView({
         </div>
     );
 }
+
+export const NodeView = React.memo(NodeViewInner, (prev, next) => {
+    if (prev.node !== next.node) return false;
+    if (prev.doc !== next.doc) return false;
+    if (prev.zoneOriginX !== next.zoneOriginX || prev.zoneOriginY !== next.zoneOriginY) return false;
+    if (prev.pageWPt !== next.pageWPt || prev.pageHPt !== next.pageHPt) return false;
+    if (prev.pageEl !== next.pageEl) return false;
+    if (prev.onStartNodeDrag !== next.onStartNodeDrag) return false;
+
+    const id = prev.node.id;
+    const prevHit = prev.dragPreview?.nodeId === id;
+    const nextHit = next.dragPreview?.nodeId === id;
+    if (prevHit !== nextHit) return false;
+    if (!prevHit && !nextHit) return true;
+    if (!prev.dragPreview || !next.dragPreview) return false;
+    return prev.dragPreview.x === next.dragPreview.x && prev.dragPreview.y === next.dragPreview.y;
+});
